@@ -21,7 +21,8 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Minimize2
+  Minimize2,
+  Code
 } from 'lucide-react';
 
 // --- Constants ---
@@ -755,7 +756,7 @@ const MainApp = () => {
         </div>
       )}
 
-      <main className="max-w-4xl mx-auto px-4 mt-8">
+      <main className="max-w-4xl mx-auto px-4 mt-8 flex-1">
         
         {/* Dashboard Tabs */}
         <div className="flex gap-6 mb-6 border-b border-slate-800 px-2">
@@ -875,13 +876,15 @@ const MainApp = () => {
 
         </div>
       </main>
+
       {/* Footer */}
       <footer className="mt-12 py-6 text-center text-slate-600 text-xs border-t border-slate-800/50">
         <p className="flex items-center justify-center gap-2">
             <Code size={12} />
-            Developed by <span className="text-sky-500 font-medium">Shubham</span> • © {new Date().getFullYear()}
+            Developed by <span className="text-sky-500 font-medium">Your Name</span> • © {new Date().getFullYear()}
         </p>
       </footer>
+
     </div>
   );
 };
