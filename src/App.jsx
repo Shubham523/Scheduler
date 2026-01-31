@@ -875,6 +875,13 @@ const MainApp = () => {
 
         </div>
       </main>
+      {/* Footer */}
+      <footer className="mt-12 py-6 text-center text-slate-600 text-xs border-t border-slate-800/50">
+        <p className="flex items-center justify-center gap-2">
+            <Code size={12} />
+            Developed by <span className="text-sky-500 font-medium">Shubham</span> • © {new Date().getFullYear()}
+        </p>
+      </footer>
     </div>
   );
 };
