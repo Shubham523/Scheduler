@@ -22,7 +22,8 @@ import {
   Pause,
   RotateCcw,
   Minimize2,
-  Code
+  Code,
+  SquareDashedBottom // Icon for empty block
 } from 'lucide-react';
 
 // --- Constants ---
@@ -66,6 +67,12 @@ const CATEGORIES = {
     barColor: "bg-slate-500",
     icon: Layout 
   },
+  empty: {
+    label: "Empty",
+    color: "bg-slate-800/50 text-slate-400 border-slate-700 dashed border-2",
+    barColor: "bg-slate-700",
+    icon: SquareDashedBottom
+  }
 };
 
 // --- Helper Functions ---
@@ -73,6 +80,13 @@ const CATEGORIES = {
 const timeToMinutes = (time) => {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
+};
+
+// Convert minutes back to HH:MM string
+const minutesToTime = (totalMinutes) => {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 };
 
 const getDuration = (start, end) => timeToMinutes(end) - timeToMinutes(start);
@@ -158,21 +172,22 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
   const isWorkOrStudy = event.category === 'work' || event.category === 'study';
 
   return (
-    <div className={`relative group p-4 mb-3 rounded-xl border ${catConfig.color} hover:border-opacity-60 transition-all`}>
-      <div className="flex justify-between items-start">
-        <div className="flex gap-4">
-          <div className="mt-1">
+    <div className={`relative group p-4 mb-3 rounded-xl border ${catConfig.color} transition-all`}>
+      <div className="flex justify-between items-start gap-3">
+        {/* Content Section */}
+        <div className="flex gap-4 min-w-0 flex-1">
+          <div className="mt-1 flex-shrink-0">
             <Icon size={18} className="opacity-80" />
           </div>
-          <div>
-            <h4 className="font-semibold text-base tracking-wide">{event.title}</h4>
-            <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono">
-              <span className="flex items-center gap-1"><Clock size={12} /> {event.start} - {event.end}</span>
+          <div className="min-w-0 flex-1">
+            <h4 className="font-semibold text-base tracking-wide truncate pr-2">{event.title}</h4>
+            <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono flex-wrap">
+              <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {event.start} - {event.end}</span>
               <span>•</span>
               <span>{Math.round(getDuration(event.start, event.end) / 60 * 10) / 10}h</span>
             </div>
             {event.days && event.days.length > 1 && (
-                <div className="flex gap-1 mt-2">
+                <div className="flex gap-1 mt-2 flex-wrap">
                     {DAYS_OF_WEEK.map(d => (
                         <span key={d} className={`text-[10px] w-5 h-5 flex items-center justify-center rounded-full ${event.days.includes(d) ? 'bg-current bg-opacity-20 font-bold' : 'opacity-20'}`}>
                             {d[0]}
@@ -182,7 +197,9 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
             )}
           </div>
         </div>
-        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity items-center">
+
+        {/* Action Buttons - Always visible on mobile, visible on hover for desktop */}
+        <div className="flex gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center">
            {isWorkOrStudy && (
              <button 
                 onClick={() => onStartFocus(event)}
@@ -257,7 +274,7 @@ const StatsRing = ({ percentage, colorClass, label }) => {
 
 // --- Modal Component ---
 
-const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay }) => {
+const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
   const [formData, setFormData] = useState({ 
     title: '', 
     category: 'work', 
@@ -274,20 +291,20 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay }) => {
         isRecurring: initialData.days && initialData.days.length > 1
       });
     } else {
+      // Use intelligent defaults passed from parent
       setFormData({ 
         title: '', 
         category: 'work', 
-        start: '09:00', 
-        end: '10:00',
+        start: initialStart || '09:00', 
+        end: initialEnd || '10:00',
         days: [currentDay],
         isRecurring: false
       });
     }
-  }, [initialData, isOpen, currentDay]);
+  }, [initialData, isOpen, currentDay, initialStart, initialEnd]);
 
   const toggleDay = (day) => {
     if (formData.days.includes(day)) {
-        // Prevent deselecting all days
         if (formData.days.length > 1) {
             setFormData(prev => ({ ...prev, days: prev.days.filter(d => d !== day) }));
         }
@@ -316,7 +333,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay }) => {
               value={formData.title}
               onChange={(e) => setFormData({...formData, title: e.target.value})}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
-              placeholder="e.g. Project Meeting"
+              placeholder="e.g. Physics Class"
               autoFocus
             />
           </div>
@@ -334,7 +351,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay }) => {
                             setFormData(prev => ({ 
                                 ...prev, 
                                 isRecurring: isChecked,
-                                days: isChecked ? prev.days : [currentDay] // Reset to single day if unchecked
+                                days: isChecked ? prev.days : [currentDay]
                             }));
                         }}
                         className="rounded bg-slate-800 border-slate-600 text-sky-600 focus:ring-sky-500"
@@ -450,70 +467,32 @@ const MainApp = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
 
   // File Input Ref
   const fileInputRef = useRef(null);
 
-  // 2. Save to Local Storage whenever events change
+  // 2. Save to Local Storage
   useEffect(() => {
     localStorage.setItem('lifeSyncEvents', JSON.stringify(events));
   }, [events]);
 
-  // 3. Reminders System
+  // 3. Reminders System (Simplified)
   useEffect(() => {
-    // Check permission status on load
-    if (Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
-    }
-
-    const interval = setInterval(() => {
-        if (Notification.permission !== 'granted') return;
-        
-        const now = new Date();
-        const currentDayIndex = now.getDay(); // 0 = Sunday, 1 = Monday
-        // Convert JS day index to our string format
-        const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const todayStr = dayMap[currentDayIndex];
-        
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        const currentTimeInMins = currentHour * 60 + currentMinute;
-
-        events.forEach(event => {
-            // Check if event happens today
-            if (event.days && event.days.includes(todayStr)) {
-                const eventStartMins = timeToMinutes(event.start);
-                const diff = eventStartMins - currentTimeInMins;
-                
-                // Notify 5 minutes before (diff === 5)
-                if (diff === 5) {
-                    new Notification(`Upcoming: ${event.title}`, {
-                        body: `Starting in 5 minutes (${event.start})`,
-                        icon: '/icon.png' // Would work in PWA
-                    });
-                }
-            }
-        });
-
-    }, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, [events]);
+    if (Notification.permission === 'granted') setNotificationsEnabled(true);
+  }, []);
 
   const requestNotificationPermission = async () => {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
         setNotificationsEnabled(true);
         showNotification("Notifications enabled!", "success");
-    } else {
-        showNotification("Permission denied. Check browser settings.", "error");
     }
   };
 
   // --- Logic Engines ---
   
   const displayedEvents = useMemo(() => {
-    // Filter events if they include the selected day in their 'days' array
     return events.filter(e => (e.days && e.days.includes(selectedDay)))
                  .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }, [events, selectedDay]);
@@ -544,16 +523,9 @@ const MainApp = () => {
     if (displayedEvents.length > 0) {
         if (!byCategory.health || byCategory.health < 30) {
         suggs.push({
-            id: 'missing-health', title: "No Movement Detected",
-            reason: "Physical activity is missing on " + selectedDay + ". A 30m walk improves focus.",
-            action: { title: "Evening Walk", category: "health", start: "18:00", end: "18:30", days: [selectedDay] }
-        });
-        }
-        if ((!byCategory.study || byCategory.study < 60) && (!byCategory.work || byCategory.work < 120)) {
-        suggs.push({
-            id: 'missing-study', title: "Increase Focus Time",
-            reason: "Deep work schedule is light on " + selectedDay + ".",
-            action: { title: "Deep Study", category: "study", start: "14:00", end: "15:30", days: [selectedDay] }
+            id: 'missing-health', title: "No Movement",
+            reason: "Missing physical activity.",
+            action: { title: "Walk", category: "health", start: "18:00", end: "18:30", days: [selectedDay] }
         });
         }
     }
@@ -567,12 +539,51 @@ const MainApp = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // --- Smart Logic: Find Next Available Slot ---
+  const findNextFreeSlot = (targetDay) => {
+    // 1. Get events for the day, sorted
+    const dayEvents = events.filter(e => e.days.includes(targetDay))
+                            .sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    
+    // 2. Start looking from 08:00 AM (480 mins)
+    let currentPointer = 8 * 60; 
+    const blockDuration = 60; // 1 hour default
+
+    for (let e of dayEvents) {
+        const eStart = timeToMinutes(e.start);
+        const eEnd = timeToMinutes(e.end);
+
+        // If there is a gap between pointer and next event start
+        if (eStart - currentPointer >= blockDuration) {
+            return { 
+                start: minutesToTime(currentPointer), 
+                end: minutesToTime(currentPointer + blockDuration) 
+            };
+        }
+        
+        // Push pointer to end of current event if it extends past pointer
+        if (eEnd > currentPointer) {
+            currentPointer = eEnd;
+        }
+    }
+
+    // If no gaps found, return slot after last event
+    // Cap at 23:00 to prevent overnight weirdness
+    if (currentPointer + blockDuration < 24 * 60) {
+        return { 
+            start: minutesToTime(currentPointer), 
+            end: minutesToTime(currentPointer + blockDuration) 
+        };
+    }
+
+    // Fallback if day is full
+    return { start: '09:00', end: '10:00' };
+  };
+
   const checkOverlap = (newEvent, excludeId = null) => {
     const newStart = timeToMinutes(newEvent.start);
     const newEnd = timeToMinutes(newEvent.end);
     
-    // Flatten check: Do any days in newEvent overlap with existing events on those days?
-    // Get all events that share ANY day with newEvent
     const relevantEvents = events.filter(e => 
         e.id !== excludeId && 
         e.days.some(day => newEvent.days.includes(day))
@@ -607,13 +618,41 @@ const MainApp = () => {
     setEditingEvent(null);
   };
 
+  // Button: Add Task (Manual)
   const openAddModal = () => {
     setEditingEvent(null);
+    // Calculate smart time
+    const slot = findNextFreeSlot(selectedDay);
+    setSmartTime(slot);
     setIsModalOpen(true);
+  };
+
+  // Button: Quick Add Empty (Efficient Timetable Entry)
+  const handleQuickAddEmpty = () => {
+    const slot = findNextFreeSlot(selectedDay);
+    const newEvent = {
+        id: Date.now(),
+        title: "Empty Slot",
+        category: "empty",
+        start: slot.start,
+        end: slot.end,
+        days: [selectedDay]
+    };
+    
+    // Check overlap briefly (though findNextFreeSlot shouldn't return overlap)
+    const overlap = checkOverlap(newEvent);
+    if (overlap) {
+        showNotification("Schedule full! Cannot add empty block.", "error");
+        return;
+    }
+
+    setEvents([...events, newEvent]);
+    showNotification("Added Empty Block at " + slot.start);
   };
 
   const openEditModal = (event) => {
     setEditingEvent(event);
+    setSmartTime({ start: event.start, end: event.end });
     setIsModalOpen(true);
   };
 
@@ -645,15 +684,11 @@ const MainApp = () => {
             if (Array.isArray(importedEvents)) {
                 setEvents(importedEvents);
                 showNotification("Schedule restored successfully!");
-            } else {
-                showNotification("Invalid file format", "error");
             }
-        } catch (error) {
-            showNotification("Error reading file", "error");
-        }
+        } catch (error) {}
     };
     reader.readAsText(file);
-    e.target.value = null; // Reset input
+    e.target.value = null; 
   };
 
   return (
@@ -680,6 +715,8 @@ const MainApp = () => {
         onSave={handleSaveEvent}
         initialData={editingEvent}
         currentDay={selectedDay}
+        initialStart={smartTime.start}
+        initialEnd={smartTime.end}
       />
 
       {/* Header */}
@@ -735,12 +772,22 @@ const MainApp = () => {
                 <Upload size={18} />
             </button>
             <div className="h-8 w-[1px] bg-slate-800 mx-1"></div>
+            
+            {/* Quick Add Empty Button */}
+             <button 
+                onClick={handleQuickAddEmpty}
+                className="p-2 rounded-lg text-slate-400 border border-slate-700 bg-slate-800 hover:bg-slate-700 hover:text-slate-200 transition-all shadow-lg"
+                title="Quick Add Empty Block"
+            >
+                <SquareDashedBottom size={18} />
+            </button>
+
             <button 
                 onClick={openAddModal}
                 className="flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-lg transition-all shadow-lg shadow-sky-900/20"
             >
                 <Plus size={16} />
-                <span>Add Task</span>
+                <span className="hidden sm:inline">Add Task</span>
             </button>
           </div>
         </div>
@@ -869,7 +916,7 @@ const MainApp = () => {
                 <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl border border-indigo-500/30 p-5">
                     <h3 className="font-bold mb-2 text-indigo-200">Pro Tip</h3>
                     <p className="text-indigo-200/70 text-sm mb-0 leading-relaxed">
-                        Deep work is best done in 90-minute blocks. Try scheduling your next block at 10:00 AM.
+                        Click the dashed square icon to quickly add empty blocks for your timetable.
                     </p>
                 </div>
             </div>
@@ -881,7 +928,7 @@ const MainApp = () => {
       <footer className="mt-12 py-6 text-center text-slate-600 text-xs border-t border-slate-800/50">
         <p className="flex items-center justify-center gap-2">
             <Code size={12} />
-            Developed by <span className="text-sky-500 font-medium">Shubham</span> • © {new Date().getFullYear()}
+            Developed by <span className="text-sky-500 font-medium">Your Name</span> • © {new Date().getFullYear()}
         </p>
       </footer>
 
