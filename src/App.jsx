@@ -1,3 +1,6 @@
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken } from "firebase/messaging";
+import { getFirestore, doc, setDoc, collection, onSnapshot } from "firebase/firestore";
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Calendar, 
@@ -31,6 +34,19 @@ import {
 } from 'lucide-react';
 
 // --- Constants ---
+const firebaseConfig = {
+  apiKey: "AIzaSyD3kk6lsdTUtm-FqxXuXXWHzUZlskbm4hk",
+  authDomain: "lifesync-73485.firebaseapp.com",
+  projectId: "lifesync-73485",
+  storageBucket: "lifesync-73485.firebasestorage.app",
+  messagingSenderId: "846606800836",
+  appId: "1:846606800836:web:3a20fe80eba7826f6a3691"
+};
+
+
+const app = initializeApp(firebaseConfig);
+const messaging = getMessaging(app);
+const db = getFirestore(app);
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -547,6 +563,22 @@ const MainApp = () => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
 
+  const updateSchedule = async (newEvents) => {
+  setEvents(newEvents); // Updates the UI instantly
+  
+    const deviceId = localStorage.getItem('lifeSyncDeviceId');
+    if (!deviceId) return; // Requires clicking the bell icon at least once to get an ID
+
+    try {
+     await setDoc(doc(db, "userSchedules", deviceId), {
+        events: newEvents,
+        updatedAt: new Date()
+      });
+    } catch (error) {
+      console.error("Firestore Save Error:", error);
+    }
+  };
+
   // Refs
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
@@ -674,14 +706,34 @@ const MainApp = () => {
         localStorage.setItem('lifeSyncNotifications', 'false');
         showNotification("Notifications muted", "success");
     } else {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-            setNotificationsEnabled(true);
-            localStorage.setItem('lifeSyncNotifications', 'true');
-            triggerAlert("Test Alert", "Notifications are working perfectly!");
-            showNotification("Notifications active", "success");
-        } else {
-            showNotification("Permission denied by browser.", "error");
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                const currentToken = await getToken(messaging, { 
+                  vapidKey: 'BNs5QOobu3CA-6NZ3dP7xV3_b1iMjqddsGkZey6cItqbgLa7gmg_L0IpEMm24_xXvCSZAXxdGxmExZJg2rcetPE' // Replace this string
+                });
+                
+                if (currentToken) {
+                    console.log("Device Token:", currentToken); // We need this for Step 4
+                    const deviceId = localStorage.getItem('lifeSyncDeviceId') || crypto.randomUUID();
+                    localStorage.setItem('lifeSyncDeviceId', deviceId);
+                    await setDoc(doc(db, "deviceTokens", deviceId), {
+                      token: currentToken,
+                      updatedAt: new Date()
+                    });
+                    setNotificationsEnabled(true);
+                    localStorage.setItem('lifeSyncNotifications', 'true');
+                    triggerAlert("Test Alert", "Notifications are working perfectly!");
+                    showNotification("Notifications active", "success");
+                } else {
+                    showNotification("Failed to generate token.", "error");
+                }
+            } else {
+                showNotification("Permission denied by browser.", "error");
+            }
+        } catch (err) {
+            console.error("Error retrieving token:", err);
+            showNotification("Error enabling notifications.", "error");
         }
     }
   };
@@ -904,7 +956,13 @@ const MainApp = () => {
       <EventModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSave={handleSaveEvent}
+        onSave={(data) => {
+          let newEvents;
+          if (editingEvent) newEvents = events.map(e => e.id === editingEvent.id ? {...data, id: e.id} : e);
+          else newEvents = [...events, {...data, id: Date.now().toString()}];
+          updateSchedule(newEvents);
+          setIsModalOpen(false);
+        }}
         initialData={editingEvent}
         currentDay={selectedDay}
         initialStart={smartTime.start}
@@ -1064,7 +1122,7 @@ const MainApp = () => {
                                     <EventCard 
                                         key={event.id} 
                                         event={event} 
-                                        onDelete={(id) => setEvents(events.filter(e => e.id !== id))}
+                                        onDelete={(id) => updateSchedule(events.filter(e => e.id !== id))}
                                         onEdit={openEditModal}
                                         onStartFocus={setActiveFocusEvent}
                                     />
