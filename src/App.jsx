@@ -940,7 +940,7 @@ const MainApp = () => {
              ))}
           </div>
 
-          <div className="flex gap-2 w-full md:w-auto justify-end items-center">
+          <div className="flex flex-wrap justify-center md:justify-end gap-2 w-full md:w-auto items-center">
             
             <button 
                 onClick={toggleNotifications}
