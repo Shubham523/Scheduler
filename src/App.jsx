@@ -25,12 +25,9 @@ import {
   Minimize2,
   Code,
   SquareDashedBottom,
-  Sparkles,
-  Loader2,
-  Key,
-  Image as ImageIcon,
   Sun,
-  Moon
+  Moon,
+  Music
 } from 'lucide-react';
 
 // --- Constants ---
@@ -103,32 +100,8 @@ const formatTime = (seconds) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Play a distinct notification sound
-const playNotificationSound = () => {
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
-    
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.5);
-  } catch (e) {
-    console.error("Audio play failed", e);
-  }
-};
-
 // Flash the tab title
-const flashTabTitle = (message) => {
+const flashTabTitle = (message, stopRef) => {
   let isOriginal = true;
   const originalTitle = document.title;
   const interval = setInterval(() => {
@@ -136,314 +109,34 @@ const flashTabTitle = (message) => {
     isOriginal = !isOriginal;
   }, 1000);
   
-  setTimeout(() => {
+  stopRef.current = () => {
     clearInterval(interval);
     document.title = originalTitle;
-  }, 10000);
-  
-  window.addEventListener('focus', () => {
-    clearInterval(interval);
-    document.title = originalTitle;
-  }, { once: true });
+  };
 };
 
-
-// --- API Logic ---
-
-const callGeminiPlanner = async (prompt, apiKey, currentDay) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+// Send System Notification (Service Worker compatible for Android)
+const sendSystemNotification = (title, options) => {
+  if (Notification.permission !== 'granted') return;
   
-  const systemPrompt = `
-    You are a scheduling assistant for the "LifeSync" app.
-    Current Day Context: ${currentDay}.
-    
-    Categories available: "work", "study", "health", "leisure", "chore".
-    
-    Your task: Convert the user's natural language request into a JSON array of event objects.
-    Each object must have: 
-    - title (string)
-    - category (one of the strings above, default to leisure)
-    - start (HH:MM 24h format string)
-    - end (HH:MM 24h format string)
-    - days (array of strings, e.g. ["Monday", "Wednesday"])
-
-    Rules:
-    - If user doesn't specify day, assume "${currentDay}".
-    - If user says "every day", include all days of the week.
-    - Ensure start time is before end time.
-    - Return ONLY the JSON array. No markdown, no text.
-  `;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: systemPrompt + "\n\nUser Request: " + prompt }] }]
-      })
-    });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
-    
-    const text = data.candidates[0].content.parts[0].text;
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
-  } catch (err) {
-    console.error("Gemini API Error:", err);
-    throw err;
-  }
-};
-
-const callGeminiVision = async (base64Image, apiKey) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-  
-  const prompt = `
-    Analyze this timetable image. Extract the weekly schedule into a JSON array of event objects.
-    
-    Categories to map: "work" (classes/lectures), "study", "health", "leisure", "chore".
-    
-    Output JSON format:
-    [
-      {
-        "title": "Math Class",
-        "category": "work",
-        "start": "09:00",
-        "end": "10:00",
-        "days": ["Monday", "Wednesday"]
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (reg && reg.showNotification) {
+        reg.showNotification(title, options);
+      } else {
+        new Notification(title, options);
       }
-    ]
-    
-    Rules:
-    - Use 24h format (HH:MM) for start/end.
-    - If days are ambiguous, assume Monday-Friday.
-    - Return ONLY valid JSON inside. No markdown block.
-  `;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: "image/jpeg", data: base64Image } }
-          ]
-        }]
-      })
+    }).catch(() => {
+      new Notification(title, options);
     });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
-    
-    const text = data.candidates[0].content.parts[0].text;
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
-  } catch (err) {
-    console.error("Gemini API Error:", err);
-    throw err;
+  } else {
+    new Notification(title, options);
   }
 };
 
 // --- Components ---
 
-const AIModal = ({ isOpen, onClose, onGenerate }) => {
-  const [prompt, setPrompt] = useState("");
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  if (!isOpen) return null;
-
-  const handleGenerate = async () => {
-    if (!apiKey) {
-      setError("Please enter a valid API Key");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    
-    localStorage.setItem('gemini_api_key', apiKey);
-
-    try {
-      await onGenerate(prompt, apiKey);
-      setPrompt("");
-      onClose();
-    } catch (err) {
-      setError(err.message || "Failed to generate schedule");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="text-sky-400" size={20} />
-            <h3 className="text-lg font-bold text-slate-100">AI Magic Plan</h3>
-          </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
-            <X size={20} />
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-             <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
-               <Key size={12} /> Google Gemini API Key
-             </label>
-             <input 
-                type="password" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste your API key here..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-xs text-slate-300 focus:border-sky-500 outline-none"
-             />
-             <p className="text-[10px] text-slate-500 mt-1">Key is stored locally in your browser.</p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2 uppercase">What should I plan?</label>
-            <textarea 
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none min-h-[100px]"
-              placeholder="e.g. 'I have a math exam on Friday. Plan 2 hours of study every morning this week and gym in the evenings.'"
-            />
-          </div>
-
-          {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 p-2 rounded flex items-center gap-2">
-                <AlertTriangle size={12} /> {error}
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition-colors">
-            Cancel
-          </button>
-          <button 
-            onClick={handleGenerate}
-            disabled={!prompt || loading}
-            className="flex-1 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-          >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-            Generate
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const ImageUploadModal = ({ isOpen, onClose, onProcess }) => {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const fileInputRef = useRef(null);
-
-  if (!isOpen) return null;
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      processImage(file);
-    }
-  };
-
-  const processImage = async (file) => {
-    if (!apiKey) {
-      setError("Please enter a valid API Key first");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    
-    localStorage.setItem('gemini_api_key', apiKey);
-
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const base64String = reader.result.split(',')[1]; 
-        await onProcess(base64String, apiKey);
-        onClose();
-      } catch (err) {
-        setError(err.message || "Failed to process image");
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="text-sky-500" size={20} />
-            <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100">Scan Timetable</h3>
-          </div>
-          <button onClick={onClose} className="text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300">
-            <X size={20} />
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="p-3 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-slate-700/50">
-             <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-               <Key size={12} /> Google Gemini API Key
-             </label>
-             <input 
-                type="password" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste your API key here..."
-                className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-md p-2 text-xs text-gray-800 dark:text-slate-300 focus:border-sky-500 outline-none"
-             />
-          </div>
-
-          <div 
-            onClick={() => fileInputRef.current.click()}
-            className="border-2 border-dashed border-gray-300 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-sky-500 dark:hover:border-sky-500 transition-colors group"
-          >
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileSelect} 
-                className="hidden" 
-                accept="image/*"
-            />
-            {loading ? (
-                <div className="flex flex-col items-center">
-                    <Loader2 className="animate-spin text-sky-500 mb-2" size={32} />
-                    <span className="text-sm text-gray-500 dark:text-slate-400">Analyzing Schedule...</span>
-                </div>
-            ) : (
-                <div className="flex flex-col items-center">
-                    <Upload className="text-gray-400 dark:text-slate-500 group-hover:text-sky-500 mb-2" size={32} />
-                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Click to Upload Image</span>
-                    <span className="text-xs text-gray-400 dark:text-slate-500 mt-1">Supports JPG, PNG</span>
-                </div>
-            )}
-          </div>
-
-          {error && (
-            <div className="text-xs text-red-500 bg-red-50 dark:bg-red-500/10 p-2 rounded flex items-center gap-2">
-                <AlertTriangle size={12} /> {error}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const FocusTimer = ({ event, onClose }) => {
+const FocusTimer = ({ event, onClose, triggerAlert }) => {
   const [duration, setDuration] = useState(25);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
@@ -456,19 +149,19 @@ const FocusTimer = ({ event, onClose }) => {
       interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
     } else if (timeLeft === 0) {
       setIsActive(false);
-      playNotificationSound();
+      
       if (mode === 'focus') {
          setMode('break');
          setTimeLeft(5 * 60);
-         new Notification("Focus Session Complete", { body: "Time for a break!" });
+         triggerAlert("Focus Complete!", `Time for a short break. Great job on "${event.title}".`);
       } else {
          setMode('focus');
          setTimeLeft(duration * 60);
-         new Notification("Break Over", { body: "Back to work!" });
+         triggerAlert("Break Over", `Back to work on "${event.title}"!`);
       }
     }
     return () => clearInterval(interval);
-  }, [isActive, timeLeft, mode, duration]);
+  }, [isActive, timeLeft, mode, duration, event, triggerAlert]);
 
   const toggleTimer = () => setIsActive(!isActive);
   
@@ -478,14 +171,15 @@ const FocusTimer = ({ event, onClose }) => {
   };
 
   const handleDurationChange = (e) => {
-      const val = parseInt(e.target.value) || 25;
-      setDuration(val);
-      setTimeLeft(val * 60);
+      const val = parseInt(e.target.value);
+      const finalVal = isNaN(val) || val < 1 ? 1 : val;
+      setDuration(finalVal);
+      setTimeLeft(finalVal * 60);
       setIsEditing(false);
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-10 fade-in duration-300">
+    <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-bottom-10 fade-in duration-300">
       <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 p-6 rounded-2xl shadow-2xl w-80">
         <div className="flex justify-between items-start mb-4">
           <div>
@@ -504,11 +198,11 @@ const FocusTimer = ({ event, onClose }) => {
                 <div className="flex items-center justify-center gap-2">
                     <input 
                         type="number" 
-                        value={duration} 
-                        onChange={(e) => setDuration(e.target.value === '' ? '' : parseInt(e.target.value))}
+                        defaultValue={duration} 
                         onBlur={handleDurationChange}
+                        onKeyDown={(e) => e.key === 'Enter' && handleDurationChange(e)}
                         autoFocus
-                        className="text-4xl font-mono text-center w-24 bg-gray-100 dark:bg-slate-800 rounded border border-gray-300 dark:border-slate-600 text-gray-800 dark:text-slate-100"
+                        className="text-4xl font-mono text-center w-24 bg-gray-100 dark:bg-slate-800 rounded border border-gray-300 dark:border-slate-600 text-gray-800 dark:text-slate-100 outline-none focus:border-sky-500"
                     />
                     <span className="text-sm text-gray-500">min</span>
                 </div>
@@ -550,7 +244,6 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
   return (
     <div className={`relative group p-4 mb-3 rounded-xl border ${catConfig.color} transition-all bg-white dark:bg-transparent`}>
       <div className="flex justify-between items-start gap-3">
-        {/* Content Section */}
         <div className="flex gap-4 min-w-0 flex-1">
           <div className="mt-1 flex-shrink-0">
             <Icon size={18} className="opacity-80" />
@@ -574,7 +267,6 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center">
            {isWorkOrStudy && (
              <button 
@@ -647,8 +339,6 @@ const StatsRing = ({ percentage, colorClass, label }) => {
     </div>
   );
 };
-
-// --- Modal Component ---
 
 const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
   const [formData, setFormData] = useState({ 
@@ -820,7 +510,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
 };
 
 const MainApp = () => {
-  // 1. Initialize
+  // 1. Storage Init
   const [events, setEvents] = useState(() => {
     try {
         const saved = localStorage.getItem('lifeSyncEvents');
@@ -832,21 +522,43 @@ const MainApp = () => {
   const [activeTab, setActiveTab] = useState('schedule');
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [notification, setNotification] = useState(null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [activeFocusEvent, setActiveFocusEvent] = useState(null);
   
+  // Audio & Alerts State
+  const [customSoundUrl, setCustomSoundUrl] = useState(() => localStorage.getItem('lifeSyncCustomSound') || null);
+  const [activeAlert, setActiveAlert] = useState(null);
+  
+  // Notification State logic separated from interval to prevent auto-loop bug
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('lifeSyncNotifications') === 'true';
+  });
+
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
-      // Check system preference or saved pref
       if (typeof window !== 'undefined') {
           return localStorage.getItem('theme') === 'dark' || 
                  (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       }
-      return true; // Default dark
+      return true;
   });
 
+  const [notifiedEvents, setNotifiedEvents] = useState(new Set());
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
+
+  // Refs
+  const fileInputRef = useRef(null);
+  const audioInputRef = useRef(null);
+  const audioLoopInterval = useRef(null);
+  const flashStopRef = useRef(null);
+  const customAudioPlayer = useRef(null);
+
   useEffect(() => {
-      // Apply dark mode class to html element
+    localStorage.setItem('lifeSyncEvents', JSON.stringify(events));
+  }, [events]);
+
+  useEffect(() => {
       if (isDarkMode) {
           document.documentElement.classList.add('dark');
           localStorage.setItem('theme', 'dark');
@@ -856,29 +568,67 @@ const MainApp = () => {
       }
   }, [isDarkMode]);
 
-  // Track notified events to prevent duplicate alerts but ensure at least one
-  const [notifiedEvents, setNotifiedEvents] = useState(new Set());
-  
-  // Modal States
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState(null);
-  const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
+  // Alert System Logic
+  const startSyntheticVibrantLoop = () => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const playChime = () => {
+        const t = audioCtx.currentTime;
+        [523.25, 659.25, 783.99].forEach((freq, i) => { // C E G Triad
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.type = 'triangle';
+            gain.gain.setValueAtTime(0, t + i * 0.1);
+            gain.gain.linearRampToValueAtTime(0.2, t + i * 0.1 + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + i * 0.1 + 0.5);
+            osc.start(t + i * 0.1);
+            osc.stop(t + i * 0.1 + 0.5);
+        });
+    };
+    playChime();
+    audioLoopInterval.current = setInterval(playChime, 2500);
+  };
 
-  const fileInputRef = useRef(null);
+  const triggerAlert = (title, message) => {
+    if (!notificationsEnabled) return;
+    
+    // Prevent overlapping alerts
+    if (activeAlert) return; 
 
-  // 2. Save
+    setActiveAlert({ title, message });
+    sendSystemNotification(`Alert: ${title}`, { body: message, icon: '/vite.svg', requireInteraction: true });
+    flashTabTitle(`Alert: ${title}`, flashStopRef);
+
+    if (customSoundUrl) {
+        customAudioPlayer.current = new Audio(customSoundUrl);
+        customAudioPlayer.current.loop = true;
+        customAudioPlayer.current.play().catch(() => {
+            // Fallback if browser blocks auto-play
+            startSyntheticVibrantLoop();
+        });
+    } else {
+        startSyntheticVibrantLoop();
+    }
+  };
+
+  const dismissAlert = () => {
+    setActiveAlert(null);
+    if (audioLoopInterval.current) clearInterval(audioLoopInterval.current);
+    if (flashStopRef.current) flashStopRef.current();
+    if (customAudioPlayer.current) {
+        customAudioPlayer.current.pause();
+        customAudioPlayer.current.currentTime = 0;
+    }
+  };
+
+  // Schedule Scanner Loop
   useEffect(() => {
-    localStorage.setItem('lifeSyncEvents', JSON.stringify(events));
-  }, [events]);
-
-  // 3. AGGRESSIVE NOTIFICATION SYSTEM
-  useEffect(() => {
-    if (Notification.permission === 'granted') setNotificationsEnabled(true);
+    if (!notificationsEnabled) return;
 
     const checkNotifications = () => {
-        if (!notificationsEnabled || Notification.permission !== 'granted') return;
+        if (activeAlert) return; // Don't trigger new ones while one is ringing
         
         const now = new Date();
         const currentDayIndex = now.getDay(); 
@@ -890,21 +640,13 @@ const MainApp = () => {
         const currentTimeInMins = currentHour * 60 + currentMinute;
 
         events.forEach(event => {
-            // Check if event is today
             if (event.days && event.days.includes(todayStr)) {
                 const eventStartMins = timeToMinutes(event.start);
                 const diff = eventStartMins - currentTimeInMins;
-                
                 const eventUid = `${event.id}-${todayStr}`; 
 
                 if (diff > 0 && diff <= 5 && !notifiedEvents.has(eventUid)) {
-                    playNotificationSound();
-                    flashTabTitle(`Alert: ${event.title}`);
-                    new Notification(`Upcoming: ${event.title}`, {
-                        body: `Starting in ${diff} minutes (${event.start})`,
-                        icon: '/vite.svg',
-                        requireInteraction: true 
-                    });
+                    triggerAlert(event.title, `Starting in ${diff} minutes (${event.start})`);
                     setNotifiedEvents(prev => new Set(prev).add(eventUid));
                 }
             }
@@ -924,38 +666,173 @@ const MainApp = () => {
         clearInterval(interval);
         clearInterval(cleanup);
     };
-  }, [events, notificationsEnabled, notifiedEvents]);
+  }, [events, notificationsEnabled, notifiedEvents, activeAlert]);
 
   const toggleNotifications = async () => {
     if (notificationsEnabled) {
         setNotificationsEnabled(false);
+        localStorage.setItem('lifeSyncNotifications', 'false');
         showNotification("Notifications muted", "success");
-        return;
-    }
-
-    if (Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
-        playNotificationSound();
-        new Notification("LifeSync", { body: "System alerts active!" });
-        showNotification("Notifications active", "success");
     } else {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
             setNotificationsEnabled(true);
-            playNotificationSound();
-            new Notification("LifeSync", { body: "Notifications enabled!" });
+            localStorage.setItem('lifeSyncNotifications', 'true');
+            triggerAlert("Test Alert", "Notifications are working perfectly!");
             showNotification("Notifications active", "success");
         } else {
-            showNotification("Permission denied. Check settings.", "error");
+            showNotification("Permission denied by browser.", "error");
         }
     }
   };
 
-  // --- Logic Engines ---
-  
+  // --- Handlers ---
+  const showNotification = (msg, type = 'success') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleCustomAudioUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Check size limit (< 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        showNotification("Audio file must be less than 2MB.", "error");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const base64Audio = event.target.result;
+        setCustomSoundUrl(base64Audio);
+        try {
+            localStorage.setItem('lifeSyncCustomSound', base64Audio);
+            showNotification("Custom alert sound saved!");
+        } catch (e) {
+            showNotification("File too large for local storage.", "error");
+        }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = null;
+  };
+
+  const removeCustomAudio = () => {
+      setCustomSoundUrl(null);
+      localStorage.removeItem('lifeSyncCustomSound');
+      showNotification("Restored default alert chime.");
+  };
+
+  const findNextFreeSlot = (targetDay) => {
+    const dayEvents = events.filter(e => e.days.includes(targetDay))
+                            .sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    
+    let currentPointer = 8 * 60; 
+    const blockDuration = 60; 
+
+    for (let e of dayEvents) {
+        const eStart = timeToMinutes(e.start);
+        const eEnd = timeToMinutes(e.end);
+
+        if (eStart - currentPointer >= blockDuration) {
+            return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
+        }
+        if (eEnd > currentPointer) {
+            currentPointer = eEnd;
+        }
+    }
+    if (currentPointer + blockDuration < 24 * 60) {
+        return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
+    }
+    return { start: '09:00', end: '10:00' };
+  };
+
+  const checkOverlap = (newEvent, excludeId = null) => {
+    const newStart = timeToMinutes(newEvent.start);
+    const newEnd = timeToMinutes(newEvent.end);
+    const relevantEvents = events.filter(e => e.id !== excludeId && e.days.some(day => newEvent.days.includes(day)));
+
+    return relevantEvents.find(e => {
+      const eStart = timeToMinutes(e.start);
+      const eEnd = timeToMinutes(e.end);
+      return (newStart < eEnd && newEnd > eStart);
+    });
+  };
+
+  const handleSaveEvent = (data) => {
+    const overlap = checkOverlap(data, editingEvent ? editingEvent.id : null);
+    if (overlap) {
+        showNotification(`Overlap Warning: Conflicts with "${overlap.title}"`, 'error');
+        return; 
+    }
+
+    if (editingEvent) {
+      setEvents(events.map(e => e.id === editingEvent.id ? { ...data, id: editingEvent.id } : e));
+      showNotification("Task updated successfully.");
+    } else {
+      const newEvent = { ...data, id: Date.now() };
+      setEvents([...events, newEvent]);
+      showNotification("New task added.");
+    }
+    setIsModalOpen(false);
+    setEditingEvent(null);
+  };
+
+  const openAddModal = () => {
+    setEditingEvent(null);
+    setSmartTime(findNextFreeSlot(selectedDay));
+    setIsModalOpen(true);
+  };
+
+  const handleQuickAddEmpty = () => {
+    const slot = findNextFreeSlot(selectedDay);
+    const newEvent = { id: Date.now(), title: "Empty Slot", category: "empty", start: slot.start, end: slot.end, days: [selectedDay] };
+    const overlap = checkOverlap(newEvent);
+    
+    if (overlap) return showNotification("Schedule full! Cannot add empty block.", "error");
+    setEvents([...events, newEvent]);
+    showNotification("Added Empty Block at " + slot.start);
+  };
+
+  const openEditModal = (event) => {
+    setEditingEvent(event);
+    setSmartTime({ start: event.start, end: event.end });
+    setIsModalOpen(true);
+  };
+
+  const handleExport = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(events));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "lifesync_backup.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    showNotification("Schedule exported!");
+  };
+
+  const handleImportClick = () => fileInputRef.current.click();
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const importedEvents = JSON.parse(event.target.result);
+            if (Array.isArray(importedEvents)) {
+                setEvents(importedEvents);
+                showNotification("Schedule restored successfully!");
+            }
+        } catch (error) {}
+    };
+    reader.readAsText(file);
+    e.target.value = null; 
+  };
+
+  // Logic Engines
   const displayedEvents = useMemo(() => {
-    return events.filter(e => (e.days && e.days.includes(selectedDay)))
-                 .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    return events.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }, [events, selectedDay]);
 
   const stats = useMemo(() => {
@@ -981,204 +858,47 @@ const MainApp = () => {
   const suggestions = useMemo(() => {
     const suggs = [];
     const { byCategory } = stats;
-    if (displayedEvents.length > 0) {
-        if (!byCategory.health || byCategory.health < 30) {
+    if (displayedEvents.length > 0 && (!byCategory.health || byCategory.health < 30)) {
         suggs.push({
             id: 'missing-health', title: "No Movement",
             reason: "Missing physical activity.",
             action: { title: "Walk", category: "health", start: "18:00", end: "18:30", days: [selectedDay] }
         });
-        }
     }
     return suggs;
   }, [stats, displayedEvents, selectedDay]);
 
-  // --- Handlers ---
-
-  const showNotification = (msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const findNextFreeSlot = (targetDay) => {
-    const dayEvents = events.filter(e => e.days.includes(targetDay))
-                            .sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-    
-    let currentPointer = 8 * 60; 
-    const blockDuration = 60; 
-
-    for (let e of dayEvents) {
-        const eStart = timeToMinutes(e.start);
-        const eEnd = timeToMinutes(e.end);
-
-        if (eStart - currentPointer >= blockDuration) {
-            return { 
-                start: minutesToTime(currentPointer), 
-                end: minutesToTime(currentPointer + blockDuration) 
-            };
-        }
-        if (eEnd > currentPointer) {
-            currentPointer = eEnd;
-        }
-    }
-    if (currentPointer + blockDuration < 24 * 60) {
-        return { 
-            start: minutesToTime(currentPointer), 
-            end: minutesToTime(currentPointer + blockDuration) 
-        };
-    }
-    return { start: '09:00', end: '10:00' };
-  };
-
-  const checkOverlap = (newEvent, excludeId = null) => {
-    const newStart = timeToMinutes(newEvent.start);
-    const newEnd = timeToMinutes(newEvent.end);
-    
-    const relevantEvents = events.filter(e => 
-        e.id !== excludeId && 
-        e.days.some(day => newEvent.days.includes(day))
-    );
-
-    const conflict = relevantEvents.find(e => {
-      const eStart = timeToMinutes(e.start);
-      const eEnd = timeToMinutes(e.end);
-      return (newStart < eEnd && newEnd > eStart);
-    });
-
-    return conflict;
-  };
-
-  const handleSaveEvent = (data) => {
-    const overlap = checkOverlap(data, editingEvent ? editingEvent.id : null);
-    
-    if (overlap) {
-        showNotification(`Overlap Warning: Conflicts with "${overlap.title}"`, 'error');
-        return; 
-    }
-
-    if (editingEvent) {
-      setEvents(events.map(e => e.id === editingEvent.id ? { ...data, id: editingEvent.id } : e));
-      showNotification("Task updated successfully.");
-    } else {
-      const newEvent = { ...data, id: Date.now() };
-      setEvents([...events, newEvent]);
-      showNotification("New task added.");
-    }
-    setIsModalOpen(false);
-    setEditingEvent(null);
-  };
-
-  const handleAIGeneration = async (prompt, key) => {
-      const generatedEvents = await callGeminiPlanner(prompt, key, selectedDay);
-      const eventsWithIds = generatedEvents.map(e => ({...e, id: Date.now() + Math.random() }));
-      setEvents(prev => [...prev, ...eventsWithIds]);
-      showNotification(`Added ${eventsWithIds.length} events from AI`);
-  };
-
-  const handleImageScan = async (base64, key) => {
-      const scannedEvents = await callGeminiVision(base64, key);
-      const eventsWithIds = scannedEvents.map(e => ({...e, id: Date.now() + Math.random() }));
-      setEvents(prev => [...prev, ...eventsWithIds]);
-      showNotification(`Scanned ${eventsWithIds.length} events from image`);
-  };
-
-  const openAddModal = () => {
-    setEditingEvent(null);
-    const slot = findNextFreeSlot(selectedDay);
-    setSmartTime(slot);
-    setIsModalOpen(true);
-  };
-
-  const handleQuickAddEmpty = () => {
-    const slot = findNextFreeSlot(selectedDay);
-    const newEvent = {
-        id: Date.now(),
-        title: "Empty Slot",
-        category: "empty",
-        start: slot.start,
-        end: slot.end,
-        days: [selectedDay]
-    };
-    
-    const overlap = checkOverlap(newEvent);
-    if (overlap) {
-        showNotification("Schedule full! Cannot add empty block.", "error");
-        return;
-    }
-
-    setEvents([...events, newEvent]);
-    showNotification("Added Empty Block at " + slot.start);
-  };
-
-  const openEditModal = (event) => {
-    setEditingEvent(event);
-    setSmartTime({ start: event.start, end: event.end });
-    setIsModalOpen(true);
-  };
-
-  // --- Backup Functions ---
-
-  const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(events));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "lifesync_backup.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    showNotification("Schedule exported!");
-  };
-
-  const handleImportClick = () => {
-    fileInputRef.current.click();
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            const importedEvents = JSON.parse(event.target.result);
-            if (Array.isArray(importedEvents)) {
-                setEvents(importedEvents);
-                showNotification("Schedule restored successfully!");
-            }
-        } catch (error) {}
-    };
-    reader.readAsText(file);
-    e.target.value = null; 
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 font-sans pb-10 transition-colors duration-300">
       
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        className="hidden" 
-        accept=".json"
-      />
+      {/* Hidden File Inputs */}
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
+      <input type="file" ref={audioInputRef} onChange={handleCustomAudioUpload} className="hidden" accept="audio/*" />
 
-      {activeFocusEvent && (
-        <FocusTimer event={activeFocusEvent} onClose={() => setActiveFocusEvent(null)} />
+      {/* Ringing Alert Banner */}
+      {activeAlert && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+             <div className="bg-white dark:bg-slate-900 border-2 border-sky-500 rounded-3xl p-8 text-center max-w-sm w-full shadow-[0_0_80px_rgba(14,165,233,0.4)] animate-bounce-in">
+                <div className="relative inline-block mb-4">
+                   <div className="absolute inset-0 bg-sky-500 rounded-full animate-ping opacity-75"></div>
+                   <Bell className="w-16 h-16 text-sky-500 relative z-10" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{activeAlert.title}</h2>
+                <p className="text-gray-500 dark:text-slate-400 mb-8 font-medium">{activeAlert.message}</p>
+                <button 
+                   onClick={dismissAlert} 
+                   className="w-full py-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-sky-500/50"
+                >
+                   Dismiss & Stop Audio
+                </button>
+             </div>
+          </div>
       )}
 
-      {/* AI Modal */}
-      <AIModal 
-        isOpen={isAIModalOpen} 
-        onClose={() => setIsAIModalOpen(false)} 
-        onGenerate={handleAIGeneration}
-      />
-
-      {/* Image Upload Modal */}
-      <ImageUploadModal
-        isOpen={isImageModalOpen}
-        onClose={() => setIsImageModalOpen(false)}
-        onProcess={handleImageScan}
-      />
+      {/* Focus Timer */}
+      {activeFocusEvent && (
+        <FocusTimer event={activeFocusEvent} onClose={() => setActiveFocusEvent(null)} triggerAlert={triggerAlert} />
+      )}
 
       {/* Edit/Add Modal */}
       <EventModal 
@@ -1220,25 +940,8 @@ const MainApp = () => {
              ))}
           </div>
 
-          <div className="flex gap-2 w-full md:w-auto justify-end">
-             {/* Magic Wand & Scan Buttons */}
-             <button 
-                onClick={() => setIsAIModalOpen(true)}
-                className="p-2 rounded-lg text-sky-500 border border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all"
-                title="AI Magic Planner"
-            >
-                <Sparkles size={18} />
-            </button>
-            <button 
-                onClick={() => setIsImageModalOpen(true)}
-                className="p-2 rounded-lg text-purple-500 border border-purple-500/30 bg-purple-50 dark:bg-purple-500/10 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-all"
-                title="Scan Timetable Image"
-            >
-                <ImageIcon size={18} />
-            </button>
+          <div className="flex gap-2 w-full md:w-auto justify-end items-center">
             
-            <div className="h-8 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-
             <button 
                 onClick={toggleNotifications}
                 className={`p-2 rounded-lg transition-all border ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`}
@@ -1248,6 +951,33 @@ const MainApp = () => {
             </button>
             
             <button 
+                onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()}
+                className={`p-2 rounded-lg transition-all border ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`}
+                title={customSoundUrl ? "Remove Custom Alert Sound" : "Upload Custom Alert Sound"}
+            >
+                <Music size={18} />
+            </button>
+
+            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
+
+            <button 
+                onClick={handleExport}
+                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all"
+                title="Backup Data"
+            >
+                <Download size={18} />
+            </button>
+            <button 
+                onClick={handleImportClick}
+                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all"
+                title="Restore Data"
+            >
+                <Upload size={18} />
+            </button>
+
+            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
+
+            <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200 transition-all"
                 title="Toggle Dark Mode"
@@ -1255,11 +985,11 @@ const MainApp = () => {
                 {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <div className="h-8 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
+            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
             
              <button 
                 onClick={handleQuickAddEmpty}
-                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-lg"
+                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm"
                 title="Quick Add Empty Block"
             >
                 <SquareDashedBottom size={18} />
@@ -1399,7 +1129,7 @@ const MainApp = () => {
                 <div className="bg-gradient-to-br from-indigo-600 to-slate-800 dark:from-indigo-900 dark:to-slate-900 rounded-2xl border border-indigo-200 dark:border-indigo-500/30 p-5 text-white">
                     <h3 className="font-bold mb-2 text-indigo-100 dark:text-indigo-200">Pro Tip</h3>
                     <p className="text-indigo-100/80 dark:text-indigo-200/70 text-sm mb-0 leading-relaxed">
-                        Click the Moon icon to toggle between light and dark themes.
+                        Click the Music icon (🎵) in the top bar to upload your own custom notification sound!
                     </p>
                 </div>
             </div>
