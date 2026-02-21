@@ -701,42 +701,31 @@ const MainApp = () => {
   }, [events, notificationsEnabled, notifiedEvents, activeAlert]);
 
   const toggleNotifications = async () => {
-    if (notificationsEnabled) {
-        setNotificationsEnabled(false);
-        localStorage.setItem('lifeSyncNotifications', 'false');
-        showNotification("Notifications muted", "success");
-    } else {
-        try {
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-                const currentToken = await getToken(messaging, { 
-                  vapidKey: 'BNs5QOobu3CA-6NZ3dP7xV3_b1iMjqddsGkZey6cItqbgLa7gmg_L0IpEMm24_xXvCSZAXxdGxmExZJg2rcetPE' // Replace this string
-                });
-                
-                if (currentToken) {
-                    console.log("Device Token:", currentToken); // We need this for Step 4
-                    const deviceId = localStorage.getItem('lifeSyncDeviceId') || crypto.randomUUID();
-                    localStorage.setItem('lifeSyncDeviceId', deviceId);
-                    await setDoc(doc(db, "deviceTokens", deviceId), {
-                      token: currentToken,
-                      updatedAt: new Date()
-                    });
-                    setNotificationsEnabled(true);
-                    localStorage.setItem('lifeSyncNotifications', 'true');
-                    triggerAlert("Test Alert", "Notifications are working perfectly!");
-                    showNotification("Notifications active", "success");
-                } else {
-                    showNotification("Failed to generate token.", "error");
-                }
-            } else {
-                showNotification("Permission denied by browser.", "error");
-            }
-        } catch (err) {
-            console.error("Error retrieving token:", err);
-            showNotification("Error enabling notifications.", "error");
-        }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+
+    // FIX: Wait for service worker to be fully ready before getting token
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      await navigator.serviceWorker.ready; 
+
+      const currentToken = await getToken(messaging, { 
+        vapidKey: 'BNs5QOobu3CA-6NZ3dP7xV3_b1iMjqddsGkZey6cItqbgLa7gmg_L0IpEMm24_xXvCSZAXxdGxmExZJg2rcetPE', 
+        serviceWorkerRegistration: registration
+      });
+    
+      if (currentToken) {
+      // Save to your Firestore deviceTokens collection
+        await setDoc(doc(db, "deviceTokens", deviceId), {
+          token: currentToken,
+          updatedAt: new Date()
+        });
+        setNotificationsEnabled(true);
+      }
+    } catch (err) {
+      console.error("Token Error:", err);
     }
-  };
+  };;
 
   // --- Handlers ---
   const showNotification = (msg, type = 'success') => {
