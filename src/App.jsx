@@ -1,39 +1,15 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken } from "firebase/messaging";
-import { getFirestore, doc, setDoc, collection, onSnapshot } from "firebase/firestore";
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { 
-  Calendar, 
-  Clock, 
-  Brain, 
-  Activity, 
-  Coffee, 
-  Briefcase, 
-  BookOpen, 
-  Plus, 
-  Trash2, 
-  CheckCircle, 
-  Layout,
-  Edit2,
-  X,
-  Save,
-  AlertTriangle,
-  Download,
-  Upload,
-  Bell,
-  BellOff, 
-  Play,
-  Pause,
-  RotateCcw,
-  Minimize2,
-  Code,
-  SquareDashedBottom,
-  Sun,
-  Moon,
-  Music
+  Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen, 
+  Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle, 
+  Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, 
+  Minimize2, Code, SquareDashedBottom, Sun, Moon, Music
 } from 'lucide-react';
 
-// --- Constants ---
+// --- Firebase Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyD3kk6lsdTUtm-FqxXuXXWHzUZlskbm4hk",
   authDomain: "lifesync-73485.firebaseapp.com",
@@ -43,11 +19,11 @@ const firebaseConfig = {
   appId: "1:846606800836:web:3a20fe80eba7826f6a3691"
 };
 
-
 const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
 const db = getFirestore(app);
+const messaging = typeof window !== 'undefined' && 'serviceWorker' in navigator ? getMessaging(app) : null;
 
+// --- Constants ---
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const INITIAL_EVENTS = [
@@ -57,46 +33,15 @@ const INITIAL_EVENTS = [
 ];
 
 const CATEGORIES = {
-  work: { 
-    label: "Work", 
-    color: "bg-blue-500/10 text-blue-600 dark:text-blue-200 border-blue-500/30", 
-    barColor: "bg-blue-500",
-    icon: Briefcase 
-  },
-  study: { 
-    label: "Study", 
-    color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-200 border-indigo-500/30", 
-    barColor: "bg-indigo-500",
-    icon: BookOpen 
-  },
-  health: { 
-    label: "Health", 
-    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-200 border-emerald-500/30", 
-    barColor: "bg-emerald-500",
-    icon: Activity 
-  },
-  leisure: { 
-    label: "Leisure", 
-    color: "bg-orange-500/10 text-orange-600 dark:text-orange-200 border-orange-500/30", 
-    barColor: "bg-orange-500",
-    icon: Coffee 
-  },
-  chore: { 
-    label: "Chores", 
-    color: "bg-slate-200 dark:bg-slate-700/30 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600/30", 
-    barColor: "bg-slate-500",
-    icon: Layout 
-  },
-  empty: {
-    label: "Empty",
-    color: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-300 dark:border-slate-700 dashed border-2",
-    barColor: "bg-slate-400",
-    icon: SquareDashedBottom
-  }
+  work: { label: "Work", color: "bg-blue-500/10 text-blue-600 dark:text-blue-200 border-blue-500/30", barColor: "bg-blue-500", icon: Briefcase },
+  study: { label: "Study", color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-200 border-indigo-500/30", barColor: "bg-indigo-500", icon: BookOpen },
+  health: { label: "Health", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-200 border-emerald-500/30", barColor: "bg-emerald-500", icon: Activity },
+  leisure: { label: "Leisure", color: "bg-orange-500/10 text-orange-600 dark:text-orange-200 border-orange-500/30", barColor: "bg-orange-500", icon: Coffee },
+  chore: { label: "Chores", color: "bg-slate-200 dark:bg-slate-700/30 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600/30", barColor: "bg-slate-500", icon: Layout },
+  empty: { label: "Empty", color: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-300 dark:border-slate-700 dashed border-2", barColor: "bg-slate-400", icon: SquareDashedBottom }
 };
 
 // --- Helper Functions ---
-
 const timeToMinutes = (time) => {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -116,7 +61,6 @@ const formatTime = (seconds) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Flash the tab title
 const flashTabTitle = (message, stopRef) => {
   let isOriginal = true;
   const originalTitle = document.title;
@@ -131,27 +75,19 @@ const flashTabTitle = (message, stopRef) => {
   };
 };
 
-// Send System Notification (Service Worker compatible for Android)
 const sendSystemNotification = (title, options) => {
   if (Notification.permission !== 'granted') return;
-  
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistration().then(reg => {
-      if (reg && reg.showNotification) {
-        reg.showNotification(title, options);
-      } else {
-        new Notification(title, options);
-      }
-    }).catch(() => {
-      new Notification(title, options);
-    });
+      if (reg && reg.showNotification) reg.showNotification(title, options);
+      else new Notification(title, options);
+    }).catch(() => new Notification(title, options));
   } else {
     new Notification(title, options);
   }
 };
 
 // --- Components ---
-
 const FocusTimer = ({ event, onClose, triggerAlert }) => {
   const [duration, setDuration] = useState(25);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
@@ -165,7 +101,6 @@ const FocusTimer = ({ event, onClose, triggerAlert }) => {
       interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
     } else if (timeLeft === 0) {
       setIsActive(false);
-      
       if (mode === 'focus') {
          setMode('break');
          setTimeLeft(5 * 60);
@@ -180,7 +115,6 @@ const FocusTimer = ({ event, onClose, triggerAlert }) => {
   }, [isActive, timeLeft, mode, duration, event, triggerAlert]);
 
   const toggleTimer = () => setIsActive(!isActive);
-  
   const resetTimer = () => {
     setIsActive(false);
     setTimeLeft(mode === 'focus' ? duration * 60 : 5 * 60);
@@ -213,10 +147,8 @@ const FocusTimer = ({ event, onClose, triggerAlert }) => {
             {isEditing && !isActive ? (
                 <div className="flex items-center justify-center gap-2">
                     <input 
-                        type="number" 
-                        defaultValue={duration} 
-                        onBlur={handleDurationChange}
-                        onKeyDown={(e) => e.key === 'Enter' && handleDurationChange(e)}
+                        type="number" defaultValue={duration} 
+                        onBlur={handleDurationChange} onKeyDown={(e) => e.key === 'Enter' && handleDurationChange(e)}
                         autoFocus
                         className="text-4xl font-mono text-center w-24 bg-gray-100 dark:bg-slate-800 rounded border border-gray-300 dark:border-slate-600 text-gray-800 dark:text-slate-100 outline-none focus:border-sky-500"
                     />
@@ -234,16 +166,10 @@ const FocusTimer = ({ event, onClose, triggerAlert }) => {
         </div>
 
         <div className="flex justify-center gap-4">
-          <button 
-            onClick={toggleTimer}
-            className={`p-3 rounded-full text-white transition-all shadow-lg ${isActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-sky-600 hover:bg-sky-500'}`}
-          >
+          <button onClick={toggleTimer} className={`p-3 rounded-full text-white transition-all shadow-lg ${isActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-sky-600 hover:bg-sky-500'}`}>
             {isActive ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
           </button>
-          <button 
-            onClick={resetTimer}
-            className="p-3 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 transition-all"
-          >
+          <button onClick={resetTimer} className="p-3 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 transition-all">
             <RotateCcw size={20} />
           </button>
         </div>
@@ -285,26 +211,14 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
 
         <div className="flex gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center">
            {isWorkOrStudy && (
-             <button 
-                onClick={() => onStartFocus(event)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-emerald-500 dark:text-emerald-400 transition-colors"
-                title="Start Focus Timer"
-             >
+             <button onClick={() => onStartFocus(event)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-emerald-500 dark:text-emerald-400 transition-colors" title="Start Focus Timer">
                 <Play size={16} />
              </button>
            )}
-           <button 
-            onClick={() => onEdit(event)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors"
-            title="Edit Task"
-          >
+           <button onClick={() => onEdit(event)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors" title="Edit Task">
             <Edit2 size={16} />
           </button>
-          <button 
-            onClick={() => onDelete(event.id)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors"
-            title="Delete Task"
-          >
+          <button onClick={() => onDelete(event.id)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors" title="Delete Task">
             <Trash2 size={16} />
           </button>
         </div>
@@ -313,27 +227,22 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
   );
 };
 
-const SuggestionCard = ({ suggestion, onAccept }) => {
-  return (
-    <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 p-4 rounded-xl mb-3 hover:border-sky-500 dark:hover:border-sky-500/30 transition-colors">
-      <div className="flex gap-3">
-        <div className="bg-sky-100 dark:bg-sky-500/20 p-2 rounded-lg h-fit text-sky-600 dark:text-sky-400">
-          <Brain size={18} />
-        </div>
-        <div className="flex-1">
-          <h4 className="font-medium text-gray-800 dark:text-slate-200 text-sm mb-1">{suggestion.title}</h4>
-          <p className="text-gray-600 dark:text-slate-400 text-xs mb-3 leading-relaxed">{suggestion.reason}</p>
-          <button 
-            onClick={onAccept}
-            className="text-xs bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-fit"
-          >
-            <Plus size={14} /> Add Block
-          </button>
-        </div>
+const SuggestionCard = ({ suggestion, onAccept }) => (
+  <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 p-4 rounded-xl mb-3 hover:border-sky-500 dark:hover:border-sky-500/30 transition-colors">
+    <div className="flex gap-3">
+      <div className="bg-sky-100 dark:bg-sky-500/20 p-2 rounded-lg h-fit text-sky-600 dark:text-sky-400">
+        <Brain size={18} />
+      </div>
+      <div className="flex-1">
+        <h4 className="font-medium text-gray-800 dark:text-slate-200 text-sm mb-1">{suggestion.title}</h4>
+        <p className="text-gray-600 dark:text-slate-400 text-xs mb-3 leading-relaxed">{suggestion.reason}</p>
+        <button onClick={onAccept} className="text-xs bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-fit">
+          <Plus size={14} /> Add Block
+        </button>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 const StatsRing = ({ percentage, colorClass, label }) => {
   const radius = 30;
@@ -358,37 +267,20 @@ const StatsRing = ({ percentage, colorClass, label }) => {
 
 const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
   const [formData, setFormData] = useState({ 
-    title: '', 
-    category: 'work', 
-    start: '09:00', 
-    end: '10:00',
-    days: [currentDay],
-    isRecurring: false
+    title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false
   });
 
   useEffect(() => {
     if (initialData) {
-      setFormData({
-        ...initialData,
-        isRecurring: initialData.days && initialData.days.length > 1
-      });
+      setFormData({ ...initialData, isRecurring: initialData.days && initialData.days.length > 1 });
     } else {
-      setFormData({ 
-        title: '', 
-        category: 'work', 
-        start: initialStart || '09:00', 
-        end: initialEnd || '10:00',
-        days: [currentDay],
-        isRecurring: false
-      });
+      setFormData({ title: '', category: 'work', start: initialStart || '09:00', end: initialEnd || '10:00', days: [currentDay], isRecurring: false });
     }
   }, [initialData, isOpen, currentDay, initialStart, initialEnd]);
 
   const toggleDay = (day) => {
     if (formData.days.includes(day)) {
-        if (formData.days.length > 1) {
-            setFormData(prev => ({ ...prev, days: prev.days.filter(d => d !== day) }));
-        }
+        if (formData.days.length > 1) setFormData(prev => ({ ...prev, days: prev.days.filter(d => d !== day) }));
     } else {
         setFormData(prev => ({ ...prev, days: [...prev.days, day] }));
     }
@@ -410,12 +302,9 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Task Name</label>
             <input 
-              type="text" 
-              value={formData.title}
-              onChange={(e) => setFormData({...formData, title: e.target.value})}
+              type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
               className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
-              placeholder="e.g. Physics Class"
-              autoFocus
+              placeholder="e.g. Physics Class" autoFocus
             />
           </div>
 
@@ -424,16 +313,10 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Schedule</label>
                 <div className="flex items-center gap-2">
                     <input 
-                        type="checkbox" 
-                        id="recurring"
-                        checked={formData.isRecurring}
+                        type="checkbox" id="recurring" checked={formData.isRecurring}
                         onChange={(e) => {
                             const isChecked = e.target.checked;
-                            setFormData(prev => ({ 
-                                ...prev, 
-                                isRecurring: isChecked,
-                                days: isChecked ? prev.days : [currentDay]
-                            }));
+                            setFormData(prev => ({ ...prev, isRecurring: isChecked, days: isChecked ? prev.days : [currentDay] }));
                         }}
                         className="rounded bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
                     />
@@ -444,15 +327,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
              {formData.isRecurring ? (
                 <div className="flex justify-between gap-1 p-1 bg-gray-50 dark:bg-slate-950 rounded-lg border border-gray-200 dark:border-slate-800">
                     {DAYS_OF_WEEK.map(day => (
-                        <button
-                            key={day}
-                            onClick={() => toggleDay(day)}
-                            className={`w-8 h-8 text-xs rounded-md transition-all ${
-                                formData.days.includes(day) 
-                                ? 'bg-sky-600 text-white shadow-sm' 
-                                : 'text-gray-500 dark:text-slate-500 hover:bg-gray-200 dark:hover:bg-slate-800'
-                            }`}
-                        >
+                        <button key={day} onClick={() => toggleDay(day)} className={`w-8 h-8 text-xs rounded-md transition-all ${formData.days.includes(day) ? 'bg-sky-600 text-white shadow-sm' : 'text-gray-500 dark:text-slate-500 hover:bg-gray-200 dark:hover:bg-slate-800'}`}>
                             {day[0]}
                         </button>
                     ))}
@@ -469,15 +344,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Category</label>
              <div className="grid grid-cols-3 gap-2">
                 {Object.entries(CATEGORIES).map(([key, cat]) => (
-                  <button
-                    key={key}
-                    onClick={() => setFormData({...formData, category: key})}
-                    className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs transition-all ${
-                      formData.category === key 
-                        ? `${cat.color} border-current ring-1 ring-current` 
-                        : 'border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 text-gray-500 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
+                  <button key={key} onClick={() => setFormData({...formData, category: key})} className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs transition-all ${formData.category === key ? `${cat.color} border-current ring-1 ring-current` : 'border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 text-gray-500 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800'}`}>
                     <cat.icon size={16} className="mb-1" />
                     {cat.label}
                   </button>
@@ -488,36 +355,19 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Start Time</label>
-              <input 
-                type="time" 
-                value={formData.start}
-                onChange={(e) => setFormData({...formData, start: e.target.value})}
-                className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none"
-              />
+              <input type="time" value={formData.start} onChange={(e) => setFormData({...formData, start: e.target.value})} className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">End Time</label>
-              <input 
-                type="time" 
-                value={formData.end}
-                onChange={(e) => setFormData({...formData, end: e.target.value})}
-                className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none"
-              />
+              <input type="time" value={formData.end} onChange={(e) => setFormData({...formData, end: e.target.value})} className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none" />
             </div>
           </div>
         </div>
 
         <div className="flex gap-3 mt-8">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-medium hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
-            Cancel
-          </button>
-          <button 
-            onClick={() => onSave(formData)}
-            disabled={!formData.title}
-            className="flex-1 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-          >
-            <Save size={18} />
-            Save Task
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-medium hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+          <button onClick={() => onSave(formData)} disabled={!formData.title} className="flex-1 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2">
+            <Save size={18} /> Save Task
           </button>
         </div>
       </div>
@@ -526,7 +376,17 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
 };
 
 const MainApp = () => {
-  // 1. Storage Init
+
+  // 1. Core Device ID Initialization (Crucial for Cloud Sync and Notifications)
+  const deviceId = useMemo(() => {
+    let id = localStorage.getItem('lifeSyncDeviceId');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('lifeSyncDeviceId', id);
+    }
+    return id;
+  }, []);
+
   const [events, setEvents] = useState(() => {
     try {
         const saved = localStorage.getItem('lifeSyncEvents');
@@ -539,17 +399,13 @@ const MainApp = () => {
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [notification, setNotification] = useState(null);
   const [activeFocusEvent, setActiveFocusEvent] = useState(null);
-  
-  // Audio & Alerts State
   const [customSoundUrl, setCustomSoundUrl] = useState(() => localStorage.getItem('lifeSyncCustomSound') || null);
   const [activeAlert, setActiveAlert] = useState(null);
   
-  // Notification State logic separated from interval to prevent auto-loop bug
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     return localStorage.getItem('lifeSyncNotifications') === 'true';
   });
 
-  // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
       if (typeof window !== 'undefined') {
           return localStorage.getItem('theme') === 'dark' || 
@@ -563,23 +419,21 @@ const MainApp = () => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
 
+  // 2. Updated Firestore Sync Function
   const updateSchedule = async (newEvents) => {
-  setEvents(newEvents); // Updates the UI instantly
-  
-    const deviceId = localStorage.getItem('lifeSyncDeviceId');
-    if (!deviceId) return; // Requires clicking the bell icon at least once to get an ID
-
+    setEvents(newEvents); 
     try {
-     await setDoc(doc(db, "userSchedules", deviceId), {
-        events: newEvents,
-        updatedAt: new Date()
-      });
+      if (deviceId) {
+        await setDoc(doc(db, "userSchedules", deviceId), {
+          events: newEvents,
+          updatedAt: new Date()
+        });
+      }
     } catch (error) {
       console.error("Firestore Save Error:", error);
     }
   };
 
-  // Refs
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const audioLoopInterval = useRef(null);
@@ -600,12 +454,11 @@ const MainApp = () => {
       }
   }, [isDarkMode]);
 
-  // Alert System Logic
   const startSyntheticVibrantLoop = () => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const playChime = () => {
         const t = audioCtx.currentTime;
-        [523.25, 659.25, 783.99].forEach((freq, i) => { // C E G Triad
+        [523.25, 659.25, 783.99].forEach((freq, i) => { 
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
@@ -625,8 +478,6 @@ const MainApp = () => {
 
   const triggerAlert = (title, message) => {
     if (!notificationsEnabled) return;
-    
-    // Prevent overlapping alerts
     if (activeAlert) return; 
 
     setActiveAlert({ title, message });
@@ -637,7 +488,6 @@ const MainApp = () => {
         customAudioPlayer.current = new Audio(customSoundUrl);
         customAudioPlayer.current.loop = true;
         customAudioPlayer.current.play().catch(() => {
-            // Fallback if browser blocks auto-play
             startSyntheticVibrantLoop();
         });
     } else {
@@ -655,12 +505,11 @@ const MainApp = () => {
     }
   };
 
-  // Schedule Scanner Loop
   useEffect(() => {
     if (!notificationsEnabled) return;
 
     const checkNotifications = () => {
-        if (activeAlert) return; // Don't trigger new ones while one is ringing
+        if (activeAlert) return; 
         
         const now = new Date();
         const currentDayIndex = now.getDay(); 
@@ -700,14 +549,33 @@ const MainApp = () => {
     };
   }, [events, notificationsEnabled, notifiedEvents, activeAlert]);
 
+  // 3. Robust Notification Toggle Logic
   const toggleNotifications = async () => {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      localStorage.setItem('lifeSyncNotifications', 'false');
+      return;
+    }
+
+    if (!('serviceWorker' in navigator)) {
+      showNotification("Push notifications not supported by your browser", "error");
+      return;
+    }
+
     try {
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
+      if (permission !== 'granted') {
+        showNotification("Notification permission denied", "error");
+        return;
+      }
 
-    // FIX: Wait for service worker to be fully ready before getting token
       const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      await navigator.serviceWorker.ready; 
+      await navigator.serviceWorker.ready; // Fixes pushManager error
+
+      if (!messaging) {
+         showNotification("Messaging service failed to load", "error");
+         return;
+      }
 
       const currentToken = await getToken(messaging, { 
         vapidKey: 'BNs5QOobu3CA-6NZ3dP7xV3_b1iMjqddsGkZey6cItqbgLa7gmg_L0IpEMm24_xXvCSZAXxdGxmExZJg2rcetPE', 
@@ -715,19 +583,20 @@ const MainApp = () => {
       });
     
       if (currentToken) {
-      // Save to your Firestore deviceTokens collection
         await setDoc(doc(db, "deviceTokens", deviceId), {
           token: currentToken,
           updatedAt: new Date()
         });
         setNotificationsEnabled(true);
+        localStorage.setItem('lifeSyncNotifications', 'true');
+        showNotification("Cloud notifications active!");
       }
     } catch (err) {
       console.error("Token Error:", err);
+      showNotification("Failed to connect notifications.", "error");
     }
-  };;
+  };
 
-  // --- Handlers ---
   const showNotification = (msg, type = 'success') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
@@ -736,8 +605,6 @@ const MainApp = () => {
   const handleCustomAudioUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Check size limit (< 2MB)
     if (file.size > 2 * 1024 * 1024) {
         showNotification("Audio file must be less than 2MB.", "error");
         return;
@@ -800,25 +667,6 @@ const MainApp = () => {
     });
   };
 
-  const handleSaveEvent = (data) => {
-    const overlap = checkOverlap(data, editingEvent ? editingEvent.id : null);
-    if (overlap) {
-        showNotification(`Overlap Warning: Conflicts with "${overlap.title}"`, 'error');
-        return; 
-    }
-
-    if (editingEvent) {
-      setEvents(events.map(e => e.id === editingEvent.id ? { ...data, id: editingEvent.id } : e));
-      showNotification("Task updated successfully.");
-    } else {
-      const newEvent = { ...data, id: Date.now() };
-      setEvents([...events, newEvent]);
-      showNotification("New task added.");
-    }
-    setIsModalOpen(false);
-    setEditingEvent(null);
-  };
-
   const openAddModal = () => {
     setEditingEvent(null);
     setSmartTime(findNextFreeSlot(selectedDay));
@@ -831,7 +679,7 @@ const MainApp = () => {
     const overlap = checkOverlap(newEvent);
     
     if (overlap) return showNotification("Schedule full! Cannot add empty block.", "error");
-    setEvents([...events, newEvent]);
+    updateSchedule([...events, newEvent]);
     showNotification("Added Empty Block at " + slot.start);
   };
 
@@ -862,7 +710,7 @@ const MainApp = () => {
         try {
             const importedEvents = JSON.parse(event.target.result);
             if (Array.isArray(importedEvents)) {
-                setEvents(importedEvents);
+                updateSchedule(importedEvents);
                 showNotification("Schedule restored successfully!");
             }
         } catch (error) {}
@@ -871,7 +719,6 @@ const MainApp = () => {
     e.target.value = null; 
   };
 
-  // Logic Engines
   const displayedEvents = useMemo(() => {
     return events.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }, [events, selectedDay]);
@@ -912,11 +759,9 @@ const MainApp = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 font-sans pb-10 transition-colors duration-300">
       
-      {/* Hidden File Inputs */}
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
       <input type="file" ref={audioInputRef} onChange={handleCustomAudioUpload} className="hidden" accept="audio/*" />
 
-      {/* Ringing Alert Banner */}
       {activeAlert && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
              <div className="bg-white dark:bg-slate-900 border-2 border-sky-500 rounded-3xl p-8 text-center max-w-sm w-full shadow-[0_0_80px_rgba(14,165,233,0.4)] animate-bounce-in">
@@ -926,25 +771,19 @@ const MainApp = () => {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{activeAlert.title}</h2>
                 <p className="text-gray-500 dark:text-slate-400 mb-8 font-medium">{activeAlert.message}</p>
-                <button 
-                   onClick={dismissAlert} 
-                   className="w-full py-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-sky-500/50"
-                >
+                <button onClick={dismissAlert} className="w-full py-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-sky-500/50">
                    Dismiss & Stop Audio
                 </button>
              </div>
           </div>
       )}
 
-      {/* Focus Timer */}
       {activeFocusEvent && (
         <FocusTimer event={activeFocusEvent} onClose={() => setActiveFocusEvent(null)} triggerAlert={triggerAlert} />
       )}
 
-      {/* Edit/Add Modal */}
       <EventModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+        isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} 
         onSave={(data) => {
           let newEvents;
           if (editingEvent) newEvents = events.map(e => e.id === editingEvent.id ? {...data, id: e.id} : e);
@@ -952,140 +791,72 @@ const MainApp = () => {
           updateSchedule(newEvents);
           setIsModalOpen(false);
         }}
-        initialData={editingEvent}
-        currentDay={selectedDay}
-        initialStart={smartTime.start}
-        initialEnd={smartTime.end}
+        initialData={editingEvent} currentDay={selectedDay}
+        initialStart={smartTime.start} initialEnd={smartTime.end}
       />
 
-      {/* Header */}
       <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 sticky top-0 z-20 backdrop-blur-md bg-opacity-80 dark:bg-opacity-80 transition-colors duration-300">
         <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-500/20">
               <Activity size={20} />
             </div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-slate-100 tracking-tight">
-              LifeSync
-            </h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-slate-100 tracking-tight">LifeSync</h1>
           </div>
           
-          {/* Day Selector */}
           <div className="flex overflow-x-auto gap-1 w-full md:w-auto pb-2 md:pb-0 no-scrollbar justify-start md:justify-center">
              {DAYS_OF_WEEK.map(day => (
-                 <button 
-                    key={day}
-                    onClick={() => setSelectedDay(day)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                        selectedDay === day 
-                        ? 'bg-sky-600 text-white shadow-md shadow-sky-500/30' 
-                        : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                    }`}
-                 >
+                 <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${selectedDay === day ? 'bg-sky-600 text-white shadow-md shadow-sky-500/30' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'}`}>
                     {day.substring(0, 3)}
                  </button>
              ))}
           </div>
 
           <div className="flex flex-wrap justify-center md:justify-end gap-2 w-full md:w-auto items-center">
-            
-            <button 
-                onClick={toggleNotifications}
-                className={`p-2 rounded-lg transition-all border ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`}
-                title={notificationsEnabled ? "Mute Notifications" : "Enable Notifications"}
-            >
+            <button onClick={toggleNotifications} className={`p-2 rounded-lg transition-all border ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`} title={notificationsEnabled ? "Mute Notifications" : "Enable Notifications"}>
                 {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
             </button>
-            
-            <button 
-                onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()}
-                className={`p-2 rounded-lg transition-all border ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`}
-                title={customSoundUrl ? "Remove Custom Alert Sound" : "Upload Custom Alert Sound"}
-            >
+            <button onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()} className={`p-2 rounded-lg transition-all border ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`} title={customSoundUrl ? "Remove Custom Alert Sound" : "Upload Custom Alert Sound"}>
                 <Music size={18} />
             </button>
-
             <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-
-            <button 
-                onClick={handleExport}
-                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all"
-                title="Backup Data"
-            >
-                <Download size={18} />
-            </button>
-            <button 
-                onClick={handleImportClick}
-                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all"
-                title="Restore Data"
-            >
-                <Upload size={18} />
-            </button>
-
+            <button onClick={handleExport} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all" title="Backup Data"><Download size={18} /></button>
+            <button onClick={handleImportClick} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all" title="Restore Data"><Upload size={18} /></button>
             <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-
-            <button 
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200 transition-all"
-                title="Toggle Dark Mode"
-            >
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200 transition-all" title="Toggle Dark Mode">
                 {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-
             <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-            
-             <button 
-                onClick={handleQuickAddEmpty}
-                className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm"
-                title="Quick Add Empty Block"
-            >
+             <button onClick={handleQuickAddEmpty} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm" title="Quick Add Empty Block">
                 <SquareDashedBottom size={18} />
             </button>
-
-            <button 
-                onClick={openAddModal}
-                className="flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-lg transition-all shadow-lg shadow-sky-500/30"
-            >
-                <Plus size={16} />
-                <span className="hidden sm:inline">Add Task</span>
+            <button onClick={openAddModal} className="flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-lg transition-all shadow-lg shadow-sky-500/30">
+                <Plus size={16} /> <span className="hidden sm:inline">Add Task</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Notification Toast */}
       {notification && (
-        <div className={`fixed top-20 right-4 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-bounce-in z-50 font-medium ${
-            notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white'
-        }`}>
+        <div className={`fixed top-20 right-4 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-bounce-in z-50 font-medium ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white'}`}>
           {notification.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
           {notification.msg}
         </div>
       )}
 
       <main className="max-w-4xl mx-auto px-4 mt-8 flex-1">
-        
-        {/* Dashboard Tabs */}
         <div className="flex gap-6 mb-6 border-b border-gray-200 dark:border-slate-800 px-2">
-            <button 
-                onClick={() => setActiveTab('schedule')}
-                className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'schedule' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
-            >
+            <button onClick={() => setActiveTab('schedule')} className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'schedule' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}>
                 {selectedDay}'s Schedule
                 {activeTab === 'schedule' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-sky-600 dark:bg-sky-500 rounded-t-full"></div>}
             </button>
-            <button 
-                onClick={() => setActiveTab('analysis')}
-                className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'analysis' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}
-            >
+            <button onClick={() => setActiveTab('analysis')} className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'analysis' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}>
                 Daily Insights
                 {activeTab === 'analysis' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-sky-600 dark:bg-sky-500 rounded-t-full"></div>}
             </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Main Content Area */}
             <div className="md:col-span-2 space-y-4">
                 {activeTab === 'schedule' ? (
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 p-5 min-h-[400px]">
@@ -1101,19 +872,14 @@ const MainApp = () => {
                         {displayedEvents.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 dark:text-slate-600">
                                 <p>No tasks for {selectedDay}.</p>
-                                <button onClick={openAddModal} className="mt-4 text-sky-500 hover:text-sky-400 text-sm font-medium">
-                                    + Create one now
-                                </button>
+                                <button onClick={openAddModal} className="mt-4 text-sky-500 hover:text-sky-400 text-sm font-medium">+ Create one now</button>
                             </div>
                         ) : (
                             <div className="relative ml-2 space-y-2">
                                 {displayedEvents.map((event) => (
-                                    <EventCard 
-                                        key={event.id} 
-                                        event={event} 
+                                    <EventCard key={event.id} event={event} 
                                         onDelete={(id) => updateSchedule(events.filter(e => e.id !== id))}
-                                        onEdit={openEditModal}
-                                        onStartFocus={setActiveFocusEvent}
+                                        onEdit={openEditModal} onStartFocus={setActiveFocusEvent}
                                     />
                                 ))}
                             </div>
@@ -1134,10 +900,7 @@ const MainApp = () => {
                                         <span className="font-mono text-gray-400 dark:text-slate-500">{Math.round(mins/60 * 10)/10}h</span>
                                     </div>
                                     <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-4 overflow-hidden shadow-inner">
-                                        <div 
-                                            className={`h-full ${CATEGORIES[cat].barColor} shadow-lg`} 
-                                            style={{ width: `${Math.min((mins / 720) * 100, 100)}%` }}
-                                        />
+                                        <div className={`h-full ${CATEGORIES[cat].barColor} shadow-lg`} style={{ width: `${Math.min((mins / 720) * 100, 100)}%` }} />
                                     </div>
                                 </div>
                             ))}
@@ -1146,7 +909,6 @@ const MainApp = () => {
                 )}
             </div>
 
-            {/* Sidebar / Suggestions */}
             <div className="space-y-4">
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5">
                     <h3 className="font-semibold text-gray-700 dark:text-slate-300 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
@@ -1161,7 +923,7 @@ const MainApp = () => {
                                 if (overlap) {
                                     showNotification(`Cannot add suggestion: Conflicts with "${overlap.title}"`, 'error');
                                 } else {
-                                    setEvents([...events, newAction]);
+                                    updateSchedule([...events, newAction]);
                                     showNotification("Block added.");
                                 }
                             }} />
@@ -1184,14 +946,12 @@ const MainApp = () => {
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="mt-12 py-6 text-center text-gray-500 dark:text-slate-600 text-xs border-t border-gray-200 dark:border-slate-800/50">
         <p className="flex items-center justify-center gap-2">
             <Code size={12} />
             Developed by <span className="text-sky-600 dark:text-sky-500 font-medium">Shubham Saini</span> • © {new Date().getFullYear()}
         </p>
       </footer>
-
     </div>
   );
 };
