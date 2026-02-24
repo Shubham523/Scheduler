@@ -1,10 +1,7 @@
-// api/cron.js
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 
-// 1. Initialize Firebase Admin safely
-// We check if it's already initialized to prevent hot-reload errors
 if (!getApps().length) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     initializeApp({
@@ -16,70 +13,58 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 export default async function handler(req, res) {
-    // 2. Security: Prevent random people from visiting this URL
-    // We will set this secret in Vercel later
     if (req.query.key !== process.env.CRON_SECRET) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
-        // 3. Get Current Time (UTC is best for backend logic)
         const now = new Date();
         
-        // 4. Query Firestore: Find tasks that are due right now or in the past
-        // AND haven't been sent yet.
-        // Note: Make sure your Firestore dates are stored as standard ISO strings or Timestamps
+        // 1. Calculate the "Target Time" (10 minutes from now)
+        // We want to find tasks scheduled for roughly "Now + 10 mins"
+        const tenMinutesFromNow = new Date(now.getTime() + 10 * 60000);
+
+        // 2. Define a small "window" to catch tasks
+        // Because cron jobs run every minute, we look for tasks scheduled 
+        // between "9 minutes from now" and "11 minutes from now" to be safe.
+        const startWindow = new Date(tenMinutesFromNow.getTime() - 60000); // 9 mins from now
+        const endWindow = new Date(tenMinutesFromNow.getTime() + 60000);   // 11 mins from now
+
+        // 3. Query Firestore
         const snapshot = await db.collection('userSchedules')
-            .where('scheduledTime', '<=', now.toISOString()) 
-            .where('status', '==', 'pending')
+            .where('scheduledTime', '>=', startWindow.toISOString())
+            .where('scheduledTime', '<=', endWindow.toISOString())
+            .where('status', '==', 'pending') // Ensure we haven't sent it yet
             .get();
 
         if (snapshot.empty) {
-            return res.status(200).json({ message: 'No tasks due right now.' });
+            return res.status(200).json({ message: 'No tasks due in 10 mins.' });
         }
 
-        console.log(`Found ${snapshot.size} tasks to process.`);
-
-        // 5. Loop through tasks and send notifications
+        // 4. Send Notifications
         const promises = snapshot.docs.map(async (doc) => {
             const task = doc.data();
-            
-            // Get the device token for this user
             const tokenDoc = await db.collection('deviceTokens').doc(task.deviceId).get();
             
-            if (!tokenDoc.exists) {
-                console.log(`No token found for device: ${task.deviceId}`);
-                return; 
-            }
-
-            const fcmToken = tokenDoc.data().token;
-
-            // Send via FCM
-            try {
+            if (tokenDoc.exists) {
                 await messaging.send({
-                    token: fcmToken,
+                    token: tokenDoc.data().token,
                     notification: {
-                        title: "LifeSync Alert",
-                        body: `It's time for: ${task.title}`
+                        title: "Upcoming Task (10m)", 
+                        body: `Heads up! ${task.title} starts in 10 minutes.`
                     }
                 });
 
-                // Mark as 'sent' so we don't spam the user
-                await doc.ref.update({ status: 'sent', sentAt: new Date().toISOString() });
-                
-            } catch (error) {
-                console.error(`Failed to send to ${task.deviceId}:`, error);
-                // Optional: Mark as 'failed' if token is invalid
+                // Mark as sent so we don't alert them again
+                await doc.ref.update({ status: 'sent', sentAt: now.toISOString() });
             }
         });
 
-        // Wait for all notifications to be sent
         await Promise.all(promises);
-
         return res.status(200).json({ success: true, processed: snapshot.size });
 
     } catch (error) {
-        console.error("Cron Job Error:", error);
+        console.error("Error:", error);
         return res.status(500).json({ error: error.message });
     }
 }
