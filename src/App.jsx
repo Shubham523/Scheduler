@@ -578,7 +578,7 @@ const MainApp = () => {
       }
 
       const currentToken = await getToken(messaging, { 
-        vapidKey: 'BNs5QOobu3CA-6NZ3dP7xV3_b1iMjqddsGkZey6cItqbgLa7gmg_L0IpEMm24_xXvCSZAXxdGxmExZJg2rcetPE', 
+        vapidKey: 'BMOZR-PBqFw-3ds-7PskvNkqjiQbcsKlV9-CRN3IU9lwd--OoKz5GLJU2YDJhpsrMMozU7EqSZ-W4FDQXRI44tQ', 
         serviceWorkerRegistration: registration
       });
     
