@@ -4,9 +4,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 
 if (!getApps().length) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    initializeApp({
-        credential: cert(serviceAccount)
-    });
+    initializeApp({ credential: cert(serviceAccount) });
 }
 
 const db = getFirestore();
@@ -18,53 +16,80 @@ export default async function handler(req, res) {
     }
 
     try {
+        // 1. Get current time in IST (UTC + 5:30)
         const now = new Date();
-        
-        // 1. Calculate the "Target Time" (10 minutes from now)
-        // We want to find tasks scheduled for roughly "Now + 10 mins"
-        const tenMinutesFromNow = new Date(now.getTime() + 10 * 60000);
+        const localOffset = 5.5 * 60 * 60 * 1000;
+        const localNow = new Date(now.getTime() + localOffset);
 
-        // 2. Define a small "window" to catch tasks
-        // Because cron jobs run every minute, we look for tasks scheduled 
-        // between "9 minutes from now" and "11 minutes from now" to be safe.
-        const startWindow = new Date(tenMinutesFromNow.getTime() - 60000); // 9 mins from now
-        const endWindow = new Date(tenMinutesFromNow.getTime() + 60000);   // 11 mins from now
+        // 2. Add 10 minutes to find the "Target Time"
+        const targetTime = new Date(localNow.getTime() + 10 * 60000);
 
-        // 3. Query Firestore
-        const snapshot = await db.collection('userSchedules')
-            .where('scheduledTime', '>=', startWindow.toISOString())
-            .where('scheduledTime', '<=', endWindow.toISOString())
-            .where('status', '==', 'pending') // Ensure we haven't sent it yet
-            .get();
+        // Format to "HH:mm" (e.g., "09:00")
+        const hours = targetTime.getUTCHours().toString().padStart(2, '0');
+        const minutes = targetTime.getUTCMinutes().toString().padStart(2, '0');
+        const searchTime = `${hours}:${minutes}`;
+
+        // Get the current Day of the Week (e.g., "Monday")
+        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const currentDay = daysOfWeek[targetTime.getUTCDay()];
+
+        console.log(`Checking for tasks on ${currentDay} at exactly: ${searchTime}`);
+
+        // 3. Fetch ALL user schedules 
+        // (Since we can't query inside arrays directly via Firestore)
+        const snapshot = await db.collection('userSchedules').get();
 
         if (snapshot.empty) {
-            return res.status(200).json({ message: 'No tasks due in 10 mins.' });
+            return res.status(200).json({ success: true, message: "No schedules found in DB." });
         }
 
-        // 4. Send Notifications
-        const promises = snapshot.docs.map(async (doc) => {
-            const task = doc.data();
-            const tokenDoc = await db.collection('deviceTokens').doc(task.deviceId).get();
-            
-            if (tokenDoc.exists) {
-                await messaging.send({
-                    token: tokenDoc.data().token,
-                    notification: {
-                        title: "Upcoming Task (10m)", 
-                        body: `Heads up! ${task.title} starts in 10 minutes.`
-                    }
-                });
+        let notificationsSent = 0;
+        const promises = [];
 
-                // Mark as sent so we don't alert them again
-                await doc.ref.update({ status: 'sent', sentAt: now.toISOString() });
-            }
+        // 4. Loop through each user's document
+        snapshot.docs.forEach((doc) => {
+            const deviceId = doc.id; // Your document ID is the device ID!
+            const userData = doc.data();
+            const events = userData.events || []; // Safely grab the events array
+
+            // 5. Loop through the events array inside the document
+            events.forEach((event) => {
+                
+                // Check if the time matches
+                const isTimeMatch = event.start === searchTime;
+                
+                // Check if today is one of the scheduled days (if recurring)
+                let isDayMatch = true;
+                if (event.isRecurring && event.days && event.days.length > 0) {
+                    isDayMatch = event.days.includes(currentDay);
+                }
+
+                // If both time and day match, FIRE THE NOTIFICATION!
+                if (isTimeMatch && isDayMatch) {
+                    console.log(`Match! Task: ${event.title} for device: ${deviceId}`);
+
+                    const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
+                        .then(tokenDoc => {
+                            if (tokenDoc.exists) {
+                                notificationsSent++;
+                                return messaging.send({
+                                    token: tokenDoc.data().token,
+                                    notification: {
+                                        title: "LifeSync: Upcoming Task", 
+                                        body: `${event.title} starts in 10 minutes at ${event.start}.`
+                                    }
+                                });
+                            }
+                        });
+                    promises.push(tokenPromise);
+                }
+            });
         });
 
         await Promise.all(promises);
-        return res.status(200).json({ success: true, processed: snapshot.size });
+        return res.status(200).json({ success: true, processed: notificationsSent });
 
     } catch (error) {
-        console.error("Error:", error);
         return res.status(500).json({ error: error.message });
     }
 }
