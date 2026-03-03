@@ -95,30 +95,77 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
   const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const isSwipeLockedIn = useRef(false);   // true once we commit to horizontal swipe
+  const isScrollIntent = useRef(false);     // true once we detect vertical scroll intent
+  const rafId = useRef(null);
+  const cardRef = useRef(null);
+
+  const DEAD_ZONE = 15;       // px before deciding swipe vs scroll
+  const DELETE_THRESHOLD = 120; // px to trigger delete
+  const RESISTANCE_POINT = 140; // px where rubber-band resistance kicks in
+
+  // Attach touchmove as non-passive so e.preventDefault() works
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', handleTouchMove);
+  });
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isSwipeLockedIn.current = false;
+    isScrollIntent.current = false;
   };
 
   const handleTouchMove = (e) => {
-    if (!touchStartX.current) return;
+    if (!touchStartX.current || isScrollIntent.current) return;
+
     const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX.current;
-    
-    // Provide a little resistance
-    if (diff > 100) setSwipeOffset(100 + (diff - 100) * 0.2);
-    else if (diff < -100) setSwipeOffset(-100 + (diff + 100) * 0.2);
-    else setSwipeOffset(diff);
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - touchStartX.current;
+    const diffY = currentY - touchStartY.current;
+
+    // Dead zone: decide intent before doing anything
+    if (!isSwipeLockedIn.current) {
+      if (Math.abs(diffX) < DEAD_ZONE && Math.abs(diffY) < DEAD_ZONE) return; // still in dead zone
+      if (Math.abs(diffY) > Math.abs(diffX)) {
+        // Vertical movement dominates → user is scrolling, bail out
+        isScrollIntent.current = true;
+        return;
+      }
+      // Horizontal dominates → commit to swipe
+      isSwipeLockedIn.current = true;
+    }
+
+    // Prevent page scroll while swiping horizontally
+    e.preventDefault();
+
+    // Apply rubber-band resistance past RESISTANCE_POINT
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(() => {
+      let offset;
+      if (diffX > RESISTANCE_POINT) offset = RESISTANCE_POINT + (diffX - RESISTANCE_POINT) * 0.2;
+      else if (diffX < -RESISTANCE_POINT) offset = -RESISTANCE_POINT + (diffX + RESISTANCE_POINT) * 0.2;
+      else offset = diffX;
+      setSwipeOffset(offset);
+    });
   };
 
   const handleTouchEnd = () => {
+    if (rafId.current) cancelAnimationFrame(rafId.current);
     // Both directions trigger a delete!
-    if (Math.abs(swipeOffset) > 80) {
+    if (Math.abs(swipeOffset) > DELETE_THRESHOLD) {
       triggerDelete(swipeOffset > 0 ? 1 : -1);
     } else {
       setSwipeOffset(0);
     }
     touchStartX.current = null;
+    touchStartY.current = null;
+    isSwipeLockedIn.current = false;
+    isScrollIntent.current = false;
   };
 
   const triggerDelete = (direction = -1) => {
@@ -131,7 +178,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   };
 
   // Math for the background animations based on pull distance
-  const progress = Math.min(Math.abs(swipeOffset) / 80, 1);
+  const progress = Math.min(Math.abs(swipeOffset) / DELETE_THRESHOLD, 1);
   const circleSize = Math.min(Math.abs(swipeOffset), 56); 
   const iconScale = 0.5 + (progress * 0.5); 
 
@@ -163,11 +210,11 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
 
       {/* THE DRAGGABLE CARD LAYER */}
       <div 
+        ref={cardRef}
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onDoubleClick={() => onEdit(event)}
-        style={{ transform: `translateX(${swipeOffset}px)` }}
+        style={{ transform: `translateX(${swipeOffset}px)`, touchAction: 'pan-y' }}
         className={`relative group py-4 px-1 border cursor-pointer select-none
         ${isActive ? 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.3)] bg-sky-50 dark:bg-sky-900/20' : `${catConfig.color} bg-white dark:bg-slate-900`}
         ${swipeOffset === 0 || isExiting ? 'transition-transform duration-300' : ''} 
