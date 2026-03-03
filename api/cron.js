@@ -70,10 +70,10 @@ export default async function handler(req, res) {
                                     webpush: {
                                         notification: {
                                             icon: "https://scheduler-ten-tan.vercel.app/vite.svg", 
-                                            requireInteraction: true, // Makes it sticky so you don't miss it
-                                            data: {
-                                                url: "https://scheduler-ten-tan.vercel.app" 
-                                            }
+                                            requireInteraction: true, 
+                                        },
+                                        fcmOptions: {
+                                            link: "https://scheduler-ten-tan.vercel.app"
                                         }
                                     }
                                 });
