@@ -88,144 +88,142 @@ const sendSystemNotification = (title, options) => {
 };
 
 // --- Components ---
-const FocusTimer = ({ event, onClose, triggerAlert }) => {
-  const [duration, setDuration] = useState(25);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
-  const [isActive, setIsActive] = useState(false);
-  const [mode, setMode] = useState('focus'); 
-  const [isEditing, setIsEditing] = useState(false);
-
-  useEffect(() => {
-    let interval = null;
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
-    } else if (timeLeft === 0) {
-      setIsActive(false);
-      if (mode === 'focus') {
-         setMode('break');
-         setTimeLeft(5 * 60);
-         triggerAlert("Focus Complete!", `Time for a short break. Great job on "${event.title}".`);
-      } else {
-         setMode('focus');
-         setTimeLeft(duration * 60);
-         triggerAlert("Break Over", `Back to work on "${event.title}"!`);
-      }
-    }
-    return () => clearInterval(interval);
-  }, [isActive, timeLeft, mode, duration, event, triggerAlert]);
-
-  const toggleTimer = () => setIsActive(!isActive);
-  const resetTimer = () => {
-    setIsActive(false);
-    setTimeLeft(mode === 'focus' ? duration * 60 : 5 * 60);
-  };
-
-  const handleDurationChange = (e) => {
-      const val = parseInt(e.target.value);
-      const finalVal = isNaN(val) || val < 1 ? 1 : val;
-      setDuration(finalVal);
-      setTimeLeft(finalVal * 60);
-      setIsEditing(false);
-  };
-
-  return (
-    <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-bottom-10 fade-in duration-300">
-      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 p-6 rounded-2xl shadow-2xl w-80">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <span className={`text-xs font-bold uppercase tracking-wider ${mode === 'focus' ? 'text-sky-500 dark:text-sky-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
-              {mode === 'focus' ? 'Deep Focus' : 'Short Break'}
-            </span>
-            <h4 className="text-gray-800 dark:text-slate-100 font-medium truncate w-48">{event.title}</h4>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300">
-            <Minimize2 size={18} />
-          </button>
-        </div>
-
-        <div className="text-center mb-6">
-            {isEditing && !isActive ? (
-                <div className="flex items-center justify-center gap-2">
-                    <input 
-                        type="number" defaultValue={duration} 
-                        onBlur={handleDurationChange} onKeyDown={(e) => e.key === 'Enter' && handleDurationChange(e)}
-                        autoFocus
-                        className="text-4xl font-mono text-center w-24 bg-gray-100 dark:bg-slate-800 rounded border border-gray-300 dark:border-slate-600 text-gray-800 dark:text-slate-100 outline-none focus:border-sky-500"
-                    />
-                    <span className="text-sm text-gray-500">min</span>
-                </div>
-            ) : (
-                <div 
-                    onClick={() => !isActive && setIsEditing(true)}
-                    className={`text-5xl font-mono text-gray-800 dark:text-slate-100 font-light tracking-widest ${!isActive ? 'cursor-pointer hover:text-sky-500 transition-colors' : ''}`}
-                    title={!isActive ? "Click to edit duration" : ""}
-                >
-                    {formatTime(timeLeft)}
-                </div>
-            )}
-        </div>
-
-        <div className="flex justify-center gap-4">
-          <button onClick={toggleTimer} className={`p-3 rounded-full text-white transition-all shadow-lg ${isActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-sky-600 hover:bg-sky-500'}`}>
-            {isActive ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
-          </button>
-          <button onClick={resetTimer} className="p-3 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 transition-all">
-            <RotateCcw size={20} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
+const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   const catConfig = CATEGORIES[event.category] || CATEGORIES.work;
   const Icon = catConfig.icon;
-  const isWorkOrStudy = event.category === 'work' || event.category === 'study';
+
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isExiting, setIsExiting] = useState(false);
+  const touchStartX = useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchStartX.current) return;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - touchStartX.current;
+    
+    // Provide a little resistance
+    if (diff > 100) setSwipeOffset(100 + (diff - 100) * 0.2);
+    else if (diff < -100) setSwipeOffset(-100 + (diff + 100) * 0.2);
+    else setSwipeOffset(diff);
+  };
+
+  const handleTouchEnd = () => {
+    // Both directions trigger a delete!
+    if (Math.abs(swipeOffset) > 80) {
+      triggerDelete(swipeOffset > 0 ? 1 : -1);
+    } else {
+      setSwipeOffset(0);
+    }
+    touchStartX.current = null;
+  };
+
+  const triggerDelete = (direction = -1) => {
+    setSwipeOffset(direction * 500); // Fly fully off in the swiped direction
+    setIsExiting(true);   
+    
+    setTimeout(() => {
+        onDelete(event.id);
+    }, 300);
+  };
+
+  // Math for the background animations based on pull distance
+  const progress = Math.min(Math.abs(swipeOffset) / 80, 1);
+  const circleSize = Math.min(Math.abs(swipeOffset), 56); 
+  const iconScale = 0.5 + (progress * 0.5); 
 
   return (
-    <div className={`relative group p-4 mb-3 rounded-xl border ${catConfig.color} transition-all bg-white dark:bg-transparent`}>
-      <div className="flex justify-between items-start gap-3">
-        <div className="flex gap-4 min-w-0 flex-1">
-          <div className="mt-1 flex-shrink-0">
-            <Icon size={18} className="opacity-80" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="font-semibold text-base tracking-wide truncate pr-2 text-gray-800 dark:text-slate-100">{event.title}</h4>
-            <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono flex-wrap text-gray-600 dark:text-slate-300">
-              <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {event.start} - {event.end}</span>
-              <span>•</span>
-              <span>{Math.round(getDuration(event.start, event.end) / 60 * 10) / 10}h</span>
-            </div>{event.venue && (
-              <div className="flex items-center mt-1.5 text-xs font-medium text-sky-600 dark:text-sky-400">
-                <span>📍 {event.venue}</span>
+    <div className={`relative overflow-hidden transition-all duration-300 ease-out
+      ${isExiting ? 'max-h-0 opacity-0 mb-0' : 'max-h-[250px] opacity-100 mb-3'}
+    `}>
+      
+      {/* THE NEW BACKGROUND REVEAL LAYER */}
+      <div className="absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0">
+         {/* Left Dustbin (Revealed when swiping right, swipeOffset > 0) */}
+         <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset > 0 ? 'opacity-100' : 'opacity-0'}`}>
+            <div 
+               className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
+               style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
+            />
+            <Trash2 className="text-white relative z-10 transition-transform duration-75 ease-out" style={{ transform: `scale(${iconScale})` }} />
+         </div>
+
+         {/* Right Dustbin (Revealed when swiping left, swipeOffset < 0) */}
+         <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset < 0 ? 'opacity-100' : 'opacity-0'}`}>
+            <div 
+               className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
+               style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
+            />
+            <Trash2 className="text-white relative z-10 transition-transform duration-75 ease-out" style={{ transform: `scale(${iconScale})` }} />
+         </div>
+      </div>
+
+      {/* THE DRAGGABLE CARD LAYER */}
+      <div 
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onDoubleClick={() => onEdit(event)}
+        style={{ transform: `translateX(${swipeOffset}px)` }}
+        className={`relative group py-4 px-1 border cursor-pointer select-none
+        ${isActive ? 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.3)] bg-sky-50 dark:bg-sky-900/20' : `${catConfig.color} bg-white dark:bg-slate-900`}
+        ${swipeOffset === 0 || isExiting ? 'transition-transform duration-300' : ''} 
+        rounded-xl h-full w-full flex items-center z-10`}
+      >
+        
+        {/* LEFT HINT: ⟨ */}
+        <div className="text-red-500/90 dark:text-red-400/90 animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center">
+          ⟨
+        </div>
+
+        {/* MAIN CONTENT */}
+        <div className="flex justify-between items-start gap-3 flex-1 min-w-0 px-1">
+          <div className="flex gap-4 min-w-0 flex-1">
+            <div className="mt-1 flex-shrink-0">
+              <Icon size={18} className={isActive ? 'text-sky-500' : 'opacity-80'} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-semibold text-base tracking-wide truncate pr-2 text-gray-800 dark:text-slate-100">{event.title}</h4>
+              <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono flex-wrap text-gray-600 dark:text-slate-300">
+                <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {event.start} - {event.end}</span>
+                <span>•</span>
+                <span>{Math.round(getDuration(event.start, event.end) / 60 * 10) / 10}h</span>
               </div>
-            )}
-            {event.days && event.days.length > 1 && (
-                <div className="flex gap-1 mt-2 flex-wrap">
-                    {DAYS_OF_WEEK.map(d => (
-                        <span key={d} className={`text-[10px] w-5 h-5 flex items-center justify-center rounded-full ${event.days.includes(d) ? 'bg-current bg-opacity-20 font-bold text-gray-700 dark:text-slate-200' : 'opacity-20 text-gray-400 dark:text-slate-500'}`}>
-                            {d[0]}
-                        </span>
-                    ))}
+              {event.venue && (
+                <div className="flex items-center mt-1.5 text-xs font-medium text-sky-600 dark:text-sky-400">
+                  <span>📍 {event.venue}</span>
                 </div>
-            )}
+              )}
+            </div>
+          </div>
+
+          {/* DESKTOP BUTTONS (Fallback for non-touch users) */}
+          <div className="flex gap-1 opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onEdit(event); }} 
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors" 
+              title="Edit Task"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); triggerDelete(-1); }} 
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors" 
+              title="Delete Task"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
         </div>
 
-        <div className="flex gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center">
-           {isWorkOrStudy && (
-             <button onClick={() => onStartFocus(event)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-emerald-500 dark:text-emerald-400 transition-colors" title="Start Focus Timer">
-                <Play size={16} />
-             </button>
-           )}
-           <button onClick={() => onEdit(event)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors" title="Edit Task">
-            <Edit2 size={16} />
-          </button>
-          <button onClick={() => onDelete(event.id)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors" title="Delete Task">
-            <Trash2 size={16} />
-          </button>
+        {/* RIGHT HINT: ⟩ */}
+        <div className="text-red-500/90 dark:text-red-400/90 animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center">
+          ⟩
         </div>
+
       </div>
     </div>
   );
@@ -412,9 +410,20 @@ const MainApp = () => {
   const [selectedDay, setSelectedDay] = useState(() => {
   const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return dayMap[new Date().getDay()];
-});
+  });
+  const [showUpNext, setShowUpNext] = useState(true);
+  const [currentTimeMins, setCurrentTimeMins] = useState(() => {
+      const now = new Date();
+      return now.getHours() * 60 + now.getMinutes();
+  });
+  useEffect(() => {
+      const timer = setInterval(() => {
+          const now = new Date();
+          setCurrentTimeMins(now.getHours() * 60 + now.getMinutes());
+      }, 60000); 
+      return () => clearInterval(timer);
+  }, []);
   const [notification, setNotification] = useState(null);
-  const [activeFocusEvent, setActiveFocusEvent] = useState(null);
   const [customSoundUrl, setCustomSoundUrl] = useState(() => localStorage.getItem('lifeSyncCustomSound') || null);
   const [activeAlert, setActiveAlert] = useState(null);
   
@@ -794,10 +803,6 @@ const MainApp = () => {
           </div>
       )}
 
-      {activeFocusEvent && (
-        <FocusTimer event={activeFocusEvent} onClose={() => setActiveFocusEvent(null)} triggerAlert={triggerAlert} />
-      )}
-
       <EventModal 
         isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} 
         onSave={(data) => {
@@ -811,16 +816,19 @@ const MainApp = () => {
         initialStart={smartTime.start} initialEnd={smartTime.end}
       />
 
-      <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 sticky top-0 z-20 backdrop-blur-md bg-opacity-80 dark:bg-opacity-80 transition-colors duration-300">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-500/20">
-              <Activity size={20} />
+<header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 sticky top-0 z-20 backdrop-blur-md bg-opacity-80 dark:bg-opacity-80 transition-colors duration-300">
+        <div className="max-w-4xl mx-auto px-3 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
+          
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center gap-2">
+                <div className="bg-sky-600 p-1.5 rounded-lg text-white shadow-lg shadow-sky-500/20">
+                  <Activity size={18} />
+                </div>
+                <h1 className="text-lg font-bold text-gray-800 dark:text-slate-100 tracking-tight">LifeSync</h1>
             </div>
-            <h1 className="text-xl font-bold text-gray-800 dark:text-slate-100 tracking-tight">LifeSync</h1>
           </div>
           
-          <div className="flex overflow-x-auto gap-1 w-full md:w-auto pb-2 md:pb-0 no-scrollbar justify-start md:justify-center">
+          <div className="flex overflow-x-auto gap-1 w-full md:w-auto no-scrollbar justify-start md:justify-center">
              {DAYS_OF_WEEK.map(day => (
                  <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${selectedDay === day ? 'bg-sky-600 text-white shadow-md shadow-sky-500/30' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'}`}>
                     {day.substring(0, 3)}
@@ -828,34 +836,76 @@ const MainApp = () => {
              ))}
           </div>
 
-          <div className="flex flex-wrap justify-center md:justify-end gap-2 w-full md:w-auto items-center">
-            <button onClick={toggleNotifications} className={`p-2 rounded-lg transition-all border ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`} title={notificationsEnabled ? "Mute Notifications" : "Enable Notifications"}>
-                {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
+          <div className="flex flex-nowrap justify-start md:justify-end gap-1.5 w-full md:w-auto items-center overflow-x-auto no-scrollbar pb-1 md:pb-0">
+            <button onClick={toggleNotifications} className={`p-1.5 rounded-lg transition-all border shrink-0 ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800'}`}>
+                {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
             </button>
-            <button onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()} className={`p-2 rounded-lg transition-all border ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 dark:text-slate-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200'}`} title={customSoundUrl ? "Remove Custom Alert Sound" : "Upload Custom Alert Sound"}>
-                <Music size={18} />
+            <button onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()} className={`p-1.5 rounded-lg transition-all border shrink-0 ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800'}`}>
+                <Music size={16} />
             </button>
-            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-            <button onClick={handleExport} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all" title="Backup Data"><Download size={18} /></button>
-            <button onClick={handleImportClick} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 transition-all" title="Restore Data"><Upload size={18} /></button>
-            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200 transition-all" title="Toggle Dark Mode">
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            <div className="h-5 w-[1px] bg-gray-200 dark:bg-slate-800 mx-0.5 shrink-0"></div>
+            <button onClick={handleExport} className="p-1.5 rounded-lg text-gray-400 hover:text-sky-500 shrink-0"><Download size={16} /></button>
+            <button onClick={handleImportClick} className="p-1.5 rounded-lg text-gray-400 hover:text-sky-500 shrink-0"><Upload size={16} /></button>
+            <div className="h-5 w-[1px] bg-gray-200 dark:bg-slate-800 mx-0.5 shrink-0"></div>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-lg text-gray-400 border border-gray-200 dark:border-slate-700 shrink-0">
+                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <div className="h-6 w-[1px] bg-gray-200 dark:bg-slate-800 mx-1"></div>
-             <button onClick={handleQuickAddEmpty} className="p-2 rounded-lg text-gray-400 dark:text-slate-400 border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm" title="Quick Add Empty Block">
-                <SquareDashedBottom size={18} />
+             <button onClick={handleQuickAddEmpty} className="p-1.5 rounded-lg text-gray-400 border border-gray-200 dark:border-slate-700 shrink-0">
+                <SquareDashedBottom size={16} />
             </button>
-            <button onClick={openAddModal} className="flex items-center gap-2 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-lg transition-all shadow-lg shadow-sky-500/30">
-                <Plus size={16} /> <span className="hidden sm:inline">Add Task</span>
+            <button onClick={openAddModal} className="flex items-center gap-1 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-2.5 py-1.5 rounded-lg shrink-0 transition-all">
+                <Plus size={16} /> <span className="hidden md:inline">Add Task</span>
             </button>
           </div>
         </div>
-      </header>
+        
+        {/* THE DYNAMIC UP NEXT BANNER */}
+        {(() => {
+            const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            if (selectedDay !== dayMap[new Date().getDay()] || !showUpNext) return null;
 
+            const todaysEvents = events.filter(e => e.days && e.days.includes(selectedDay)).sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+            let active = null; let next = null;
+
+            for (let e of todaysEvents) {
+                const start = timeToMinutes(e.start);
+                const end = timeToMinutes(e.end);
+                if (currentTimeMins >= start && currentTimeMins < end) active = e;
+                else if (start > currentTimeMins && !next) next = e;
+            }
+
+            if (!active && !next && todaysEvents.length > 0 && currentTimeMins >= timeToMinutes(todaysEvents[todaysEvents.length-1].end)) {
+                 return (
+                    <div className="bg-emerald-500/10 border-t border-emerald-500/20 px-4 py-2 flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in slide-in-from-top-2">
+                        <span>🎉 All caught up for today!</span>
+                        <button onClick={() => setShowUpNext(false)}><X size={14}/></button>
+                    </div>
+                 );
+            }
+            if (!next) return null;
+
+            const minsUntil = timeToMinutes(next.start) - currentTimeMins;
+            return (
+                <div className="bg-sky-50 dark:bg-sky-900/20 border-t border-sky-100 dark:border-sky-800/50 px-4 py-2 flex justify-between items-center text-xs text-sky-700 dark:text-sky-300 animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold uppercase tracking-wider text-[10px] bg-sky-200 dark:bg-sky-700/50 px-2 py-0.5 rounded-full">Up Next</span>
+                        <span className="font-medium truncate max-w-[200px]">{next.title} {next.venue ? `at ${next.venue}` : ''}</span>
+                        <span className="opacity-75">in {minsUntil}m</span>
+                    </div>
+                    <button onClick={() => setShowUpNext(false)} className="opacity-60 hover:opacity-100 p-1"><X size={14}/></button>
+                </div>
+            );
+        })()}
+      </header>
       {notification && (
-        <div className={`fixed top-20 right-4 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-bounce-in z-50 font-medium ${notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white'}`}>
-          {notification.type === 'error' ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+        <div className={`fixed bottom-10 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 z-50 font-medium 
+          ${notification.type === 'error' ? 'bg-red-500 text-white' : 
+            notification.type === 'info' ? 'bg-slate-700 dark:bg-slate-600 text-slate-100' : // Softer, darker theme for standard info/delete
+            'bg-emerald-600 text-white'}`} // Success
+        >
+          {notification.type === 'error' ? <AlertTriangle size={18} /> : 
+          notification.type === 'info' ? <Trash2 size={18} /> : 
+          <CheckCircle size={18} />}
           {notification.msg}
         </div>
       )}
@@ -892,12 +942,26 @@ const MainApp = () => {
                             </div>
                         ) : (
                             <div className="relative ml-2 space-y-2">
-                                {displayedEvents.map((event) => (
-                                    <EventCard key={event.id} event={event} 
-                                        onDelete={(id) => updateSchedule(events.filter(e => e.id !== id))}
-                                        onEdit={openEditModal} onStartFocus={setActiveFocusEvent}
+                                {displayedEvents.map((event) => {
+                                  const startMins = timeToMinutes(event.start);
+                                  const endMins = timeToMinutes(event.end);
+                                  const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                                  const isToday = selectedDay === dayMap[new Date().getDay()];
+                                  const isActive = isToday && (currentTimeMins >= startMins && currentTimeMins < endMins);
+
+                                  return (
+                                    <EventCard 
+                                      key={event.id} 
+                                      event={event} 
+                                      isActive={isActive}
+                                      onDelete={(id) => {
+                                        updateSchedule(events.filter(e => e.id !== id));
+                                        showNotification("Task deleted", "info"); // "error" uses your red color scheme!
+                                      }}
+                                      onEdit={openEditModal} 
                                     />
-                                ))}
+                                  );
+                                })}
                             </div>
                         )}
                     </div>
