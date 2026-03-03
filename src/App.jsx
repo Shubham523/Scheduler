@@ -196,7 +196,11 @@ const EventCard = ({ event, onDelete, onEdit, onStartFocus }) => {
               <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {event.start} - {event.end}</span>
               <span>•</span>
               <span>{Math.round(getDuration(event.start, event.end) / 60 * 10) / 10}h</span>
-            </div>
+            </div>{event.venue && (
+              <div className="flex items-center mt-1.5 text-xs font-medium text-sky-600 dark:text-sky-400">
+                <span>📍 {event.venue}</span>
+              </div>
+            )}
             {event.days && event.days.length > 1 && (
                 <div className="flex gap-1 mt-2 flex-wrap">
                     {DAYS_OF_WEEK.map(d => (
@@ -267,14 +271,14 @@ const StatsRing = ({ percentage, colorClass, label }) => {
 
 const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
   const [formData, setFormData] = useState({ 
-    title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false
+    title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false, venue: ''
   });
 
   useEffect(() => {
     if (initialData) {
-      setFormData({ ...initialData, isRecurring: initialData.days && initialData.days.length > 1 });
+      setFormData({ ...initialData, isRecurring: initialData.days && initialData.days.length > 1, venue: initialData.venue || '' });
     } else {
-      setFormData({ title: '', category: 'work', start: initialStart || '09:00', end: initialEnd || '10:00', days: [currentDay], isRecurring: false });
+      setFormData({ title: '', category: 'work', start: initialStart || '09:00', end: initialEnd || '10:00', days: [currentDay], isRecurring: false, venue: '' });
     }
   }, [initialData, isOpen, currentDay, initialStart, initialEnd]);
 
@@ -305,6 +309,15 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
               type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
               className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
               placeholder="e.g. Physics Class" autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 mt-4 uppercase">Venue / Classroom</label>
+            <input 
+              type="text" value={formData.venue || ''} onChange={(e) => setFormData({...formData, venue: e.target.value})}
+              className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
+              placeholder="e.g. LT-3, Physics Lab (Optional)"
             />
           </div>
 

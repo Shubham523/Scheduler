@@ -49,37 +49,31 @@ export default async function handler(req, res) {
                     isDayMatch = event.days.includes(currentDay);
                 }
 
+                // 4. If BOTH time and day match, FIRE THE NOTIFICATION!
                 if (isTimeMatch && isDayMatch) {
-                    console.log(`Match! Task: ${event.title} for device: ${deviceId}`);
+                    console.log(`Firing notification for: ${event.title} (Device: ${deviceId})`);
+
+                    // NEW: The safety check for the venue!
+                    const venueText = event.venue ? ` at ${event.venue}` : "";
 
                     const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
                         .then(async (tokenDoc) => {
-                            if (!tokenDoc.exists) {
-                                console.log(`No token document found for ${deviceId}`);
-                                return;
-                            }
+                            if (!tokenDoc.exists || !tokenDoc.data().token) return;
                             
-                            const data = tokenDoc.data();
-                            
-                            // Let's actually see what we are grabbing!
-                            if (!data.token) {
-                                console.error(`CRASH AVOIDED: Document exists but 'token' field is missing. It has fields:`, Object.keys(data));
-                                return;
-                            }
-
                             try {
                                 await messaging.send({
-                                    token: data.token,
+                                    token: tokenDoc.data().token,
                                     notification: {
                                         title: "LifeSync: Upcoming Task", 
-                                        body: `${event.title} starts in 10 minutes at ${event.start}.`
+                                        body: `${event.title} starts in 10 minutes at ${event.start}${venueText}.`
                                     }
                                 });
-                                console.log(`SUCCESS: Notification sent to ${deviceId}`);
                                 notificationsSent++;
                             } catch (sendError) {
-                                // THIS is where the Google rejection happens. We print it safely.
                                 console.error(`GOOGLE REJECTED TOKEN FOR ${deviceId}:`, sendError.message);
+                                if (sendError.message.includes('not found') || sendError.code === 'messaging/registration-token-not-registered') {
+                                    await db.collection('deviceTokens').doc(deviceId).delete();
+                                }
                             }
                         });
                     promises.push(tokenPromise);
