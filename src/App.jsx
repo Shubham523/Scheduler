@@ -406,7 +406,7 @@ const MainApp = () => {
     return INITIAL_EVENTS;
   });
 
-  const [activeTab, setActiveTab] = useState('schedule');
+
   const [selectedDay, setSelectedDay] = useState(() => {
   const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return dayMap[new Date().getDay()];
@@ -836,7 +836,7 @@ const MainApp = () => {
              ))}
           </div>
 
-          <div className="flex flex-nowrap justify-start md:justify-end gap-1.5 w-full md:w-auto items-center overflow-x-auto no-scrollbar pb-1 md:pb-0">
+          <div className="flex flex-nowrap justify-center md:justify-end gap-1.5 w-full md:w-auto items-center overflow-x-auto no-scrollbar pb-1 md:pb-0">
             <button onClick={toggleNotifications} className={`p-1.5 rounded-lg transition-all border shrink-0 ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800'}`}>
                 {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
             </button>
@@ -911,20 +911,9 @@ const MainApp = () => {
       )}
 
       <main className="max-w-4xl mx-auto px-4 mt-8 flex-1">
-        <div className="flex gap-6 mb-6 border-b border-gray-200 dark:border-slate-800 px-2">
-            <button onClick={() => setActiveTab('schedule')} className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'schedule' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}>
-                {selectedDay}'s Schedule
-                {activeTab === 'schedule' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-sky-600 dark:bg-sky-500 rounded-t-full"></div>}
-            </button>
-            <button onClick={() => setActiveTab('analysis')} className={`pb-3 text-sm font-medium transition-all relative ${activeTab === 'analysis' ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'}`}>
-                Daily Insights
-                {activeTab === 'analysis' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-sky-600 dark:bg-sky-500 rounded-t-full"></div>}
-            </button>
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 space-y-4">
-                {activeTab === 'schedule' ? (
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 p-5 min-h-[400px]">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="font-semibold text-gray-800 dark:text-slate-200 flex items-center gap-2">
@@ -956,7 +945,7 @@ const MainApp = () => {
                                       isActive={isActive}
                                       onDelete={(id) => {
                                         updateSchedule(events.filter(e => e.id !== id));
-                                        showNotification("Task deleted", "info"); // "error" uses your red color scheme!
+                                        showNotification("Task deleted", "info");
                                       }}
                                       onEdit={openEditModal} 
                                     />
@@ -965,28 +954,6 @@ const MainApp = () => {
                             </div>
                         )}
                     </div>
-                ) : (
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6">
-                        <div className="flex justify-around mb-10 mt-4">
-                            <StatsRing percentage={stats.percentages.work} colorClass="text-blue-500" label="Work" />
-                            <StatsRing percentage={stats.percentages.study} colorClass="text-indigo-400" label="Study" />
-                            <StatsRing percentage={stats.percentages.health} colorClass="text-emerald-400" label="Health" />
-                        </div>
-                        <div className="space-y-6">
-                            {Object.entries(stats.byCategory).map(([cat, mins]) => (
-                                <div key={cat} className="group">
-                                    <div className="flex justify-between text-sm mb-2">
-                                        <span className="capitalize text-gray-500 dark:text-slate-400 group-hover:text-gray-800 dark:group-hover:text-slate-200 transition-colors">{cat}</span>
-                                        <span className="font-mono text-gray-400 dark:text-slate-500">{Math.round(mins/60 * 10)/10}h</span>
-                                    </div>
-                                    <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-4 overflow-hidden shadow-inner">
-                                        <div className={`h-full ${CATEGORIES[cat].barColor} shadow-lg`} style={{ width: `${Math.min((mins / 720) * 100, 100)}%` }} />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
             <div className="space-y-4">
