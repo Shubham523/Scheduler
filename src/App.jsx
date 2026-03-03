@@ -409,7 +409,10 @@ const MainApp = () => {
   });
 
   const [activeTab, setActiveTab] = useState('schedule');
-  const [selectedDay, setSelectedDay] = useState('Monday');
+  const [selectedDay, setSelectedDay] = useState(() => {
+  const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return dayMap[new Date().getDay()];
+});
   const [notification, setNotification] = useState(null);
   const [activeFocusEvent, setActiveFocusEvent] = useState(null);
   const [customSoundUrl, setCustomSoundUrl] = useState(() => localStorage.getItem('lifeSyncCustomSound') || null);
