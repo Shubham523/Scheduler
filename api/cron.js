@@ -42,45 +42,44 @@ export default async function handler(req, res) {
             const userData = doc.data();
             const events = userData.events || [];
 
-            // 5. Loop through the events array inside the document
             events.forEach((event) => {
-                
-                // 1. Check if the time matches
                 const isTimeMatch = event.start === searchTime;
-                
-                // 2. Strict Day Check (Defaults to FALSE)
-                let isDayMatch = false;
-                if (event.days && Array.isArray(event.days)) {
+                let isDayMatch = true;
+                if (event.isRecurring && event.days && event.days.length > 0) {
                     isDayMatch = event.days.includes(currentDay);
                 }
 
-                // 3. Debugging Log: If the time matches, tell us what day it thinks it is!
-                if (isTimeMatch) {
-                    console.log(`[TIME MATCH] Task: "${event.title}". Today is: ${currentDay}. Task days: [${event.days}]. Will it fire? ${isDayMatch}`);
-                }
-
-                // 4. If BOTH time and day match, FIRE THE NOTIFICATION!
                 if (isTimeMatch && isDayMatch) {
-                    console.log(`Firing notification for: ${event.title} (Device: ${deviceId})`);
+                    console.log(`Match! Task: ${event.title} for device: ${deviceId}`);
 
                     const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
                         .then(async (tokenDoc) => {
-                            if (!tokenDoc.exists || !tokenDoc.data().token) return;
+                            if (!tokenDoc.exists) {
+                                console.log(`No token document found for ${deviceId}`);
+                                return;
+                            }
                             
+                            const data = tokenDoc.data();
+                            
+                            // Let's actually see what we are grabbing!
+                            if (!data.token) {
+                                console.error(`CRASH AVOIDED: Document exists but 'token' field is missing. It has fields:`, Object.keys(data));
+                                return;
+                            }
+
                             try {
                                 await messaging.send({
-                                    token: tokenDoc.data().token,
+                                    token: data.token,
                                     notification: {
                                         title: "LifeSync: Upcoming Task", 
                                         body: `${event.title} starts in 10 minutes at ${event.start}.`
                                     }
                                 });
+                                console.log(`SUCCESS: Notification sent to ${deviceId}`);
                                 notificationsSent++;
                             } catch (sendError) {
+                                // THIS is where the Google rejection happens. We print it safely.
                                 console.error(`GOOGLE REJECTED TOKEN FOR ${deviceId}:`, sendError.message);
-                                if (sendError.message.includes('not found') || sendError.code === 'messaging/registration-token-not-registered') {
-                                    await db.collection('deviceTokens').doc(deviceId).delete();
-                                }
                             }
                         });
                     promises.push(tokenPromise);
