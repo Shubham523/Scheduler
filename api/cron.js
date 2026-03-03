@@ -63,6 +63,9 @@ export default async function handler(req, res) {
                 if (isTimeMatch && isDayMatch) {
                     console.log(`Firing notification for: ${event.title} (Device: ${deviceId})`);
 
+                    // NEW: The safety check for the venue!
+                    const venueText = event.venue ? ` at ${event.venue}` : "";
+
                     const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
                         .then(async (tokenDoc) => {
                             if (!tokenDoc.exists || !tokenDoc.data().token) return;
@@ -72,7 +75,7 @@ export default async function handler(req, res) {
                                     token: tokenDoc.data().token,
                                     notification: {
                                         title: "LifeSync: Upcoming Task", 
-                                        body: `${event.title} starts in 10 minutes at ${event.start}.`
+                                        body: `${event.title} starts in 10 minutes at ${event.start}${venueText}.`
                                     }
                                 });
                                 notificationsSent++;
