@@ -512,7 +512,7 @@ const MainApp = () => {
       end.setDate(end.getDate() + 7);
 
       const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime`,
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
