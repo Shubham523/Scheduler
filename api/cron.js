@@ -49,23 +49,49 @@ export default async function handler(req, res) {
 
         let notificationsSent = 0;
         const promises = [];
+        const debugInfo = {
+            searchTimeStr,
+            targetMinutesTotal,
+            currentDay,
+            istNow: istNow.toISOString(),
+            targetTime: targetTime.toISOString(),
+            users: []
+        };
 
         snapshot.docs.forEach((userDoc) => {
             const deviceId = userDoc.id;
             const userData = userDoc.data();
             const events = userData.events || [];
+            
+            const userDebug = {
+                deviceId,
+                eventCount: events.length,
+                events: events.map(e => ({ start: e.start, days: e.days, title: e.title })),
+                matches: []
+            };
 
             events.forEach((event) => {
-                // Double check time/day match (since multiple events might exist in activeMinutes)
                 const isTimeMatch = event.start === searchTimeStr;
                 const isDayMatch = event.days && event.days.includes(currentDay);
+
+                userDebug.matches.push({
+                    title: event.title,
+                    start: event.start,
+                    days: event.days,
+                    isTimeMatch,
+                    isDayMatch
+                });
 
                 if (isTimeMatch && isDayMatch) {
                     const venueText = event.venue ? ` at ${event.venue}` : "";
                     
                     const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
                         .then(async (tokenDoc) => {
-                            if (!tokenDoc.exists || !tokenDoc.data().token) return;
+                            if (!tokenDoc.exists || !tokenDoc.data().token) {
+                                userDebug.tokenStatus = 'missing';
+                                return;
+                            }
+                            userDebug.tokenStatus = 'found';
                             
                             try {
                                 await messaging.send({
@@ -83,7 +109,9 @@ export default async function handler(req, res) {
                                     }
                                 });
                                 notificationsSent++;
+                                userDebug.sendResult = 'success';
                             } catch (sendError) {
+                                userDebug.sendResult = sendError.message;
                                 if (sendError.code === 'messaging/registration-token-not-registered') {
                                     await db.collection('deviceTokens').doc(deviceId).delete();
                                 }
@@ -92,10 +120,11 @@ export default async function handler(req, res) {
                     promises.push(tokenPromise);
                 }
             });
+            debugInfo.users.push(userDebug);
         });
 
         await Promise.allSettled(promises);
-        return res.status(200).json({ success: true, processed: notificationsSent, reads: snapshot.size });
+        return res.status(200).json({ success: true, processed: notificationsSent, reads: snapshot.size, debug: debugInfo });
 
     } catch (error) {
         console.error("CRON ERROR:", error);
