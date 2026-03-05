@@ -17,45 +17,52 @@ export default async function handler(req, res) {
 
     try {
         const now = new Date();
-        const localOffset = 5.5 * 60 * 60 * 1000;
-        const localNow = new Date(now.getTime() + localOffset);
-        const targetTime = new Date(localNow.getTime() + 10 * 60000);
-
-        const hours = targetTime.getUTCHours().toString().padStart(2, '0');
-        const minutes = targetTime.getUTCMinutes().toString().padStart(2, '0');
-        const searchTime = `${hours}:${minutes}`;
+        // Offset for IST (UTC + 5:30)
+        const istOffset = 5.5 * 60 * 60 * 1000;
+        const istNow = new Date(now.getTime() + istOffset);
+        
+        // Target: Exactly 10 minutes from now
+        const targetTime = new Date(istNow.getTime() + 10 * 60000);
+        
+        const hours = targetTime.getUTCHours();
+        const minutes = targetTime.getUTCMinutes();
+        
+        // Format for matching the 'start' string (HH:mm)
+        const searchTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        
+        // Format for the optimized query (integer minutes from midnight)
+        const targetMinutesTotal = (hours * 60) + minutes;
 
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const currentDay = daysOfWeek[targetTime.getUTCDay()];
 
-        const snapshot = await db.collection('userSchedules').get();
+        // --- OPTIMIZATION START ---
+        // Instead of fetching all users, we only fetch users who have a task at this specific minute
+        const snapshot = await db.collection('userSchedules')
+            .where("activeMinutes", "array-contains", targetMinutesTotal)
+            .get();
+        // --- OPTIMIZATION END ---
 
         if (snapshot.empty) {
-            return res.status(200).json({ success: true, message: "No schedules found." });
+            return res.status(200).json({ success: true, message: "No relevant schedules found for this minute." });
         }
 
         let notificationsSent = 0;
         const promises = [];
 
-        snapshot.docs.forEach((doc) => {
-            const deviceId = doc.id;
-            const userData = doc.data();
+        snapshot.docs.forEach((userDoc) => {
+            const deviceId = userDoc.id;
+            const userData = userDoc.data();
             const events = userData.events || [];
 
             events.forEach((event) => {
-                const isTimeMatch = event.start === searchTime;
-                let isDayMatch = true;
-                if (event.isRecurring && event.days && event.days.length > 0) {
-                    isDayMatch = event.days.includes(currentDay);
-                }
+                // Double check time/day match (since multiple events might exist in activeMinutes)
+                const isTimeMatch = event.start === searchTimeStr;
+                const isDayMatch = event.days && event.days.includes(currentDay);
 
-                // 4. If BOTH time and day match, FIRE THE NOTIFICATION!
                 if (isTimeMatch && isDayMatch) {
-                    console.log(`Firing notification for: ${event.title} (Device: ${deviceId})`);
-
-                    // NEW: The safety check for the venue!
                     const venueText = event.venue ? ` at ${event.venue}` : "";
-
+                    
                     const tokenPromise = db.collection('deviceTokens').doc(deviceId).get()
                         .then(async (tokenDoc) => {
                             if (!tokenDoc.exists || !tokenDoc.data().token) return;
@@ -65,22 +72,19 @@ export default async function handler(req, res) {
                                     token: tokenDoc.data().token,
                                     notification: {
                                         title: "LifeSync: Upcoming Task", 
-                                        body: `${event.title} starts in 10 minutes at ${event.start}${venueText}.`
+                                        body: `${event.title} starts in 10 minutes (${event.start})${venueText}.`
                                     },
                                     webpush: {
                                         notification: {
                                             icon: "https://scheduler-ten-tan.vercel.app/vite.svg", 
                                             requireInteraction: true, 
                                         },
-                                        fcmOptions: {
-                                            link: "https://scheduler-ten-tan.vercel.app"
-                                        }
+                                        fcmOptions: { link: "https://scheduler-ten-tan.vercel.app" }
                                     }
                                 });
                                 notificationsSent++;
                             } catch (sendError) {
-                                console.error(`GOOGLE REJECTED TOKEN FOR ${deviceId}:`, sendError.message);
-                                if (sendError.message.includes('not found') || sendError.code === 'messaging/registration-token-not-registered') {
+                                if (sendError.code === 'messaging/registration-token-not-registered') {
                                     await db.collection('deviceTokens').doc(deviceId).delete();
                                 }
                             }
@@ -90,13 +94,11 @@ export default async function handler(req, res) {
             });
         });
 
-        // Use allSettled so one failure doesn't crash the whole batch
         await Promise.allSettled(promises);
-        return res.status(200).json({ success: true, processed: notificationsSent });
+        return res.status(200).json({ success: true, processed: notificationsSent, reads: snapshot.size });
 
     } catch (error) {
-        // Explicitly print the fatal error to Vercel logs
-        console.error("FATAL SERVER ERROR:", error);
+        console.error("CRON ERROR:", error);
         return res.status(500).json({ error: error.message });
     }
 }

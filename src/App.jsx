@@ -492,12 +492,20 @@ const MainApp = () => {
   const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
 
   // 2. Updated Firestore Sync Function
-  const updateSchedule = async (newEvents) => {
+    const updateSchedule = async (newEvents) => {
     setEvents(newEvents); 
     try {
       if (deviceId) {
+        // Optimization: Create a unique list of all start times in minutes
+        const activeMinutes = Array.from(new Set(
+          newEvents.map(e => {
+            const [h, m] = e.start.split(':').map(Number);
+            return h * 60 + m;
+          })
+        ));
         await setDoc(doc(db, "userSchedules", deviceId), {
           events: newEvents,
+          activeMinutes: activeMinutes, // New Attribute
           updatedAt: new Date()
         });
       }
