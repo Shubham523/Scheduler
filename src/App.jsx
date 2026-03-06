@@ -1035,6 +1035,16 @@ const MainApp = () => {
                 </button>
               )}
 
+              <button 
+                onClick={toggleNotifications} 
+                className={`p-2 rounded-lg transition-all border ${notificationsEnabled 
+                  ? 'text-emerald-500 border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 shadow-[0_0_8px_rgba(16,185,129,0.3)]' 
+                  : 'text-slate-400 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:text-slate-500'}`}
+                title={notificationsEnabled ? 'Notifications ON — tap to disable' : 'Notifications OFF — tap to enable'}
+              >
+                {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
+              </button>
+
               <button onClick={() => { setEditingEvent(null); setIsModalOpen(true); }} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform">
                 <Plus size={18}/>
               </button>
