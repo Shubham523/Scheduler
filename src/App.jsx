@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { initializeApp } from "firebase/app";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 import { getMessaging, getToken } from "firebase/messaging";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { 
   Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen, 
   Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle, 
-  Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, 
-  Minimize2, Code, SquareDashedBottom, Sun, Moon, Music
+  Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, Music,
+  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, RefreshCw,MoreVertical 
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -21,7 +22,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const messaging = typeof window !== 'undefined' && 'serviceWorker' in navigator ? getMessaging(app) : null;
+const auth = getAuth(app);
+const messaging = typeof window !== 'undefined' && 
+                  'serviceWorker' in navigator && 
+                  window.isSecureContext ? getMessaging(app) : null;
 
 // --- Constants ---
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -38,7 +42,8 @@ const CATEGORIES = {
   health: { label: "Health", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-200 border-emerald-500/30", barColor: "bg-emerald-500", icon: Activity },
   leisure: { label: "Leisure", color: "bg-orange-500/10 text-orange-600 dark:text-orange-200 border-orange-500/30", barColor: "bg-orange-500", icon: Coffee },
   chore: { label: "Chores", color: "bg-slate-200 dark:bg-slate-700/30 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600/30", barColor: "bg-slate-500", icon: Layout },
-  empty: { label: "Empty", color: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-300 dark:border-slate-700 dashed border-2", barColor: "bg-slate-400", icon: SquareDashedBottom }
+  empty: { label: "Empty", color: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-300 dark:border-slate-700 dashed border-2", barColor: "bg-slate-400", icon: SquareDashedBottom },
+  google: { label: "G-Cal", color: "bg-sky-500/10 text-sky-600 dark:text-sky-300 border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]", barColor: "bg-sky-400", icon: Calendar }
 };
 
 // --- Helper Functions ---
@@ -188,7 +193,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
     `}>
       
       {/* THE NEW BACKGROUND REVEAL LAYER */}
-      <div className="absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0">
+      <div className={`absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0 transition-opacity duration-150 ${swipeOffset !== 0 || isExiting ? 'opacity-100' : 'opacity-0'}`}>
          {/* Left Dustbin (Revealed when swiping right, swipeOffset > 0) */}
          <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset > 0 ? 'opacity-100' : 'opacity-0'}`}>
             <div 
@@ -211,18 +216,18 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
       {/* THE DRAGGABLE CARD LAYER */}
       <div 
         ref={cardRef}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onDoubleClick={() => onEdit(event)}
+        onTouchStart={event.category !== 'google' ? handleTouchStart : undefined}
+        onTouchEnd={event.category !== 'google' ? handleTouchEnd : undefined}
+        onDoubleClick={() => event.category !== 'google' && onEdit(event)}
         style={{ transform: `translateX(${swipeOffset}px)`, touchAction: 'pan-y' }}
         className={`relative group py-4 px-1 border cursor-pointer select-none
-        ${isActive ? 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.3)] bg-sky-50 dark:bg-sky-900/20' : `${catConfig.color} bg-white dark:bg-slate-900`}
+        ${isActive ? 'border-transparent shadow-[0_0_30px_rgba(56,189,248,0.25)] bg-gradient-to-r from-sky-100/80 to-transparent dark:from-sky-900/40 dark:to-slate-900' : `${catConfig.color} bg-white dark:bg-slate-900`}
         ${swipeOffset === 0 || isExiting ? 'transition-transform duration-300' : ''} 
         rounded-xl h-full w-full flex items-center z-10`}
       >
-        
+
         {/* LEFT HINT: ⟨ */}
-        <div className="text-red-500/90 dark:text-red-400/90 animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center">
+        <div className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}>
           ⟨
         </div>
 
@@ -234,10 +239,13 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="font-semibold text-base tracking-wide truncate pr-2 text-gray-800 dark:text-slate-100">{event.title}</h4>
-              <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono flex-wrap text-gray-600 dark:text-slate-300">
+              <div className="flex items-center text-xs opacity-70 mt-1.5 gap-3 font-mono flex-wrap text-gray-600 dark:text-slate-300 w-full">
                 <span className="flex items-center gap-1 whitespace-nowrap"><Clock size={12} /> {event.start} - {event.end}</span>
                 <span>•</span>
                 <span>{Math.round(getDuration(event.start, event.end) / 60 * 10) / 10}h</span>
+                {event.isBusy !== false && (
+                  <span className="text-slate-500 dark:text-slate-400 font-medium ml-auto bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px] mr-4 uppercase tracking-wide">Busy</span>
+                )}
               </div>
               {event.venue && (
                 <div className="flex items-center mt-1.5 text-xs font-medium text-sky-600 dark:text-sky-400">
@@ -267,7 +275,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
         </div>
 
         {/* RIGHT HINT: ⟩ */}
-        <div className="text-red-500/90 dark:text-red-400/90 animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center">
+        <div className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}>
           ⟩
         </div>
 
@@ -316,14 +324,14 @@ const StatsRing = ({ percentage, colorClass, label }) => {
 
 const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
   const [formData, setFormData] = useState({ 
-    title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false, venue: ''
+    title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false, venue: '', isBusy: true
   });
 
   useEffect(() => {
     if (initialData) {
-      setFormData({ ...initialData, isRecurring: initialData.days && initialData.days.length > 1, venue: initialData.venue || '' });
+      setFormData({ ...initialData, isRecurring: initialData.days && initialData.days.length > 1, venue: initialData.venue || '', isBusy: initialData.isBusy !== false });
     } else {
-      setFormData({ title: '', category: 'work', start: initialStart || '09:00', end: initialEnd || '10:00', days: [currentDay], isRecurring: false, venue: '' });
+      setFormData({ title: '', category: 'work', start: initialStart || '09:00', end: initialEnd || '10:00', days: [currentDay], isRecurring: false, venue: '', isBusy: true });
     }
   }, [initialData, isOpen, currentDay, initialStart, initialEnd]);
 
@@ -366,8 +374,16 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
             />
           </div>
 
+          <div className="flex items-center gap-2 mt-2">
+             <input 
+                 type="checkbox" id="isBusy" checked={formData.isBusy}
+                 onChange={(e) => setFormData({...formData, isBusy: e.target.checked})}
+                 className="rounded bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
+             />
+             <label htmlFor="isBusy" className="text-xs text-gray-600 dark:text-slate-300 cursor-pointer select-none">Mark as Busy (Prevents overlaps)</label>
+          </div>
           <div>
-             <div className="flex justify-between items-center mb-2">
+             <div className="flex justify-between items-center mb-4">
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Schedule</label>
                 <div className="flex items-center gap-2">
                     <input 
@@ -453,7 +469,90 @@ const MainApp = () => {
     return INITIAL_EVENTS;
   });
 
+  const [user, setUser] = useState(null);
+  const [gcalEvents, setGcalEvents] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u) {
+        const docRef = doc(db, "userSchedules", u.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().events) setEvents(docSnap.data().events);
+        fetchGCal(localStorage.getItem('gcalToken'));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+    try {
+      // If popup still fails due to COOP, you can use signInWithRedirect(auth, provider)
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential.accessToken;
+      localStorage.setItem('gcalToken', token);
+      fetchGCal(token);
+      showNotification("Logged in and synced!");
+    } catch (err) { 
+      console.error("LOGIN ERROR:", err);
+      showNotification("Login failed. Check console.", "error"); 
+    }
+  };
+
+  const fetchGCal = async (token = localStorage.getItem('gcalToken')) => {
+    if (!token) return;
+    setIsSyncing(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setDate(end.getDate() + 7);
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // ADD THIS BLOCK
+      if (res.status === 401) {
+        localStorage.removeItem('gcalToken');
+        showNotification("Session expired. Please Login again.", "error");
+        setIsSyncing(false);
+        return;
+      }
+
+      const data = await res.json();
+      console.log("RAW GCAL DATA:", data); // Check this in console!
+
+      if (data.items) {
+        const formatted = data.items.map(item => {
+          const startDT = new Date(item.start.dateTime || item.start.date);
+          const endDT = new Date(item.end.dateTime || item.end.date);
+          
+          // FIX: Simple day mapping to match DAYS_OF_WEEK array
+          const dayName = DAYS_OF_WEEK[startDT.getDay() === 0 ? 6 : startDT.getDay() - 1];
+
+          return {
+            id: item.id,
+            title: item.summary,
+            category: 'google',
+            start: startDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            end: endDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            days: [dayName], 
+            isBusy: item.transparency !== 'transparent'
+          };
+        });
+        setGcalEvents(formatted);
+        console.log("FORMATTED EVENTS:", formatted);
+      }
+    } catch (e) { 
+      console.error("FETCH ERROR:", e); 
+    }
+    setIsSyncing(false);
+  };
   const [selectedDay, setSelectedDay] = useState(() => {
   const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return dayMap[new Date().getDay()];
@@ -503,7 +602,7 @@ const MainApp = () => {
             return h * 60 + m;
           })
         ));
-        await setDoc(doc(db, "userSchedules", deviceId), {
+        await setDoc(doc(db, "userSchedules", user ? user.uid : deviceId), {
           events: newEvents,
           activeMinutes: activeMinutes, // New Attribute
           updatedAt: new Date()
@@ -513,7 +612,8 @@ const MainApp = () => {
       console.error("Firestore Save Error:", error);
     }
   };
-
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const audioLoopInterval = useRef(null);
@@ -523,7 +623,15 @@ const MainApp = () => {
   useEffect(() => {
     localStorage.setItem('lifeSyncEvents', JSON.stringify(events));
   }, [events]);
-
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   useEffect(() => {
       if (isDarkMode) {
           document.documentElement.classList.add('dark');
@@ -736,11 +844,15 @@ const MainApp = () => {
   };
 
   const checkOverlap = (newEvent, excludeId = null) => {
+    if (newEvent.isBusy === false) return null; // "Free" tasks never cause conflicts
+
     const newStart = timeToMinutes(newEvent.start);
     const newEnd = timeToMinutes(newEvent.end);
     const relevantEvents = events.filter(e => e.id !== excludeId && e.days.some(day => newEvent.days.includes(day)));
 
     return relevantEvents.find(e => {
+      if (e.isBusy === false) return false; // Ignore existing tasks marked as "Free"
+      
       const eStart = timeToMinutes(e.start);
       const eEnd = timeToMinutes(e.end);
       return (newStart < eEnd && newEnd > eStart);
@@ -800,8 +912,9 @@ const MainApp = () => {
   };
 
   const displayedEvents = useMemo(() => {
-    return events.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-  }, [events, selectedDay]);
+    const all = [...events, ...gcalEvents];
+    return all.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+  }, [events, gcalEvents, selectedDay]);
 
   const stats = useMemo(() => {
     const totalMinutes = displayedEvents.reduce((acc, curr) => acc + getDuration(curr.start, curr.end), 0);
@@ -835,6 +948,29 @@ const MainApp = () => {
     }
     return suggs;
   }, [stats, displayedEvents, selectedDay]);
+  const exportData = () => {
+    const dataStr = JSON.stringify(events);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', 'lifesync_backup.json');
+    linkElement.click();
+  };
+  const importData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedEvents = JSON.parse(event.target.result);
+        setEvents(importedEvents);
+        showNotification("Schedule imported!");
+      } catch (err) {
+        showNotification("Invalid file format", "error");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 font-sans pb-10 transition-colors duration-300">
@@ -861,6 +997,13 @@ const MainApp = () => {
       <EventModal 
         isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} 
         onSave={(data) => {
+          // Check for conflicts before saving
+          const conflict = checkOverlap(data, editingEvent ? editingEvent.id : null);
+          if (conflict) {
+            const proceed = window.confirm(`This overlaps with a busy block: "${conflict.title}". Do you still want to save?`);
+            if (!proceed) return;
+          }
+
           let newEvents;
           if (editingEvent) newEvents = events.map(e => e.id === editingEvent.id ? {...data, id: e.id} : e);
           else newEvents = [...events, {...data, id: Date.now().toString()}];
@@ -871,86 +1014,89 @@ const MainApp = () => {
         initialStart={smartTime.start} initialEnd={smartTime.end}
       />
 
-<header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 sticky top-0 z-20 backdrop-blur-md bg-opacity-80 dark:bg-opacity-80 transition-colors duration-300">
-        <div className="max-w-4xl mx-auto px-3 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
+    <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-4xl mx-auto px-4">
           
-          <div className="flex items-center justify-between w-full md:w-auto">
+          {/* Row 1: Brand & Actions */}
+          <div className="flex items-center justify-between py-2.5 mb-2.5">
+            {/* Logo */}
             <div className="flex items-center gap-2">
-                <div className="bg-sky-600 p-1.5 rounded-lg text-white shadow-lg shadow-sky-500/20">
-                  <Activity size={18} />
-                </div>
-                <h1 className="text-lg font-bold text-gray-800 dark:text-slate-100 tracking-tight">LifeSync</h1>
+              <div className="bg-sky-600 p-1.5 rounded-lg text-white shadow-lg shadow-sky-500/20">
+                <Activity size={18} />
+              </div>
+              <h1 className="font-bold text-lg">LifeSync</h1>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              {user && (
+                <button onClick={() => fetchGCal()} className={`p-2 rounded-lg text-slate-500 hover:text-sky-500 transition-colors ${isSyncing ? 'animate-spin' : ''}`}>
+                  <RefreshCw size={18}/>
+                </button>
+              )}
+
+              <button onClick={() => { setEditingEvent(null); setIsModalOpen(true); }} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform">
+                <Plus size={18}/>
+              </button>
+
+              {user ? (
+                  <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+                      <img src={user.photoURL} alt="profile" className="w-full h-full object-cover" />
+                  </div>
+              ) : (
+                  <button onClick={handleLogin} className="p-2 text-sky-600 dark:text-sky-400 font-bold text-xs"><LogIn size={20}/></button>
+              )}
+
+              {/* 3-Dot Menu */}
+              <div className="relative" ref={menuRef}>
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <MoreVertical size={20} />
+                </button>
+
+                {isMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden py-1 z-[60]">
+                    <button onClick={() => { setIsDarkMode(!isDarkMode); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                      {isDarkMode ? <Sun size={16}/> : <Moon size={16}/>}
+                      {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                    </button>
+                    <div className="h-[1px] bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                    <button onClick={() => { exportData(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                      <Download size={16}/> Export Schedule
+                    </button>
+                    <button onClick={() => { fileInputRef.current.click(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                      <Upload size={16}/> Import Schedule
+                    </button>
+                    <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={importData} />
+                    {user && (
+                      <>
+                        <div className="h-[1px] bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                        <button onClick={() => { signOut(auth); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                          <LogOut size={16}/> Logout
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          
-          <div className="flex overflow-x-auto gap-1 w-full md:w-auto no-scrollbar justify-start md:justify-center">
-             {DAYS_OF_WEEK.map(day => (
-                 <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${selectedDay === day ? 'bg-sky-600 text-white shadow-md shadow-sky-500/30' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'}`}>
-                    {day.substring(0, 3)}
-                 </button>
-             ))}
+
+          {/* Row 2: Day Selection */}
+          <div className="flex gap-1.5 pb-6 overflow-x-auto no-scrollbar justify-between">
+            {DAYS_OF_WEEK.map(d => (
+                <button 
+                  key={d} 
+                  onClick={() => setSelectedDay(d)} 
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all uppercase tracking-wider border ${selectedDay === d 
+                    ? 'bg-sky-600 text-white border-sky-500 shadow-md shadow-sky-500/20' 
+                    : 'bg-slate-100 dark:bg-slate-800/50 text-slate-500 border-transparent hover:border-slate-300 dark:hover:border-slate-700'}`}
+                >
+                  {d.slice(0,3)}
+                </button>
+            ))}
           </div>
 
-          <div className="flex flex-nowrap justify-center md:justify-end gap-1.5 w-full md:w-auto items-center overflow-x-auto no-scrollbar pb-1 md:pb-0">
-            <button onClick={toggleNotifications} className={`p-1.5 rounded-lg transition-all border shrink-0 ${notificationsEnabled ? 'text-emerald-500 border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'text-gray-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800'}`}>
-                {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-            </button>
-            <button onClick={() => customSoundUrl ? removeCustomAudio() : audioInputRef.current.click()} className={`p-1.5 rounded-lg transition-all border shrink-0 ${customSoundUrl ? 'text-purple-500 border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : 'text-gray-400 border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800'}`}>
-                <Music size={16} />
-            </button>
-            <div className="h-5 w-[1px] bg-gray-200 dark:bg-slate-800 mx-0.5 shrink-0"></div>
-            <button onClick={handleExport} className="p-1.5 rounded-lg text-gray-400 hover:text-sky-500 shrink-0"><Download size={16} /></button>
-            <button onClick={handleImportClick} className="p-1.5 rounded-lg text-gray-400 hover:text-sky-500 shrink-0"><Upload size={16} /></button>
-            <div className="h-5 w-[1px] bg-gray-200 dark:bg-slate-800 mx-0.5 shrink-0"></div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-1.5 rounded-lg text-gray-400 border border-gray-200 dark:border-slate-700 shrink-0">
-                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-             <button onClick={handleQuickAddEmpty} className="p-1.5 rounded-lg text-gray-400 border border-gray-200 dark:border-slate-700 shrink-0">
-                <SquareDashedBottom size={16} />
-            </button>
-            <button onClick={openAddModal} className="flex items-center gap-1 text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white px-2.5 py-1.5 rounded-lg shrink-0 transition-all">
-                <Plus size={16} /> <span className="hidden md:inline">Add Task</span>
-            </button>
-          </div>
         </div>
-        
-        {/* THE DYNAMIC UP NEXT BANNER */}
-        {(() => {
-            const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-            if (selectedDay !== dayMap[new Date().getDay()] || !showUpNext) return null;
-
-            const todaysEvents = events.filter(e => e.days && e.days.includes(selectedDay)).sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-            let active = null; let next = null;
-
-            for (let e of todaysEvents) {
-                const start = timeToMinutes(e.start);
-                const end = timeToMinutes(e.end);
-                if (currentTimeMins >= start && currentTimeMins < end) active = e;
-                else if (start > currentTimeMins && !next) next = e;
-            }
-
-            if (!active && !next && todaysEvents.length > 0 && currentTimeMins >= timeToMinutes(todaysEvents[todaysEvents.length-1].end)) {
-                 return (
-                    <div className="bg-emerald-500/10 border-t border-emerald-500/20 px-4 py-2 flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in slide-in-from-top-2">
-                        <span>🎉 All caught up for today!</span>
-                        <button onClick={() => setShowUpNext(false)}><X size={14}/></button>
-                    </div>
-                 );
-            }
-            if (!next) return null;
-
-            const minsUntil = timeToMinutes(next.start) - currentTimeMins;
-            return (
-                <div className="bg-sky-50 dark:bg-sky-900/20 border-t border-sky-100 dark:border-sky-800/50 px-4 py-2 flex justify-between items-center text-xs text-sky-700 dark:text-sky-300 animate-in slide-in-from-top-2">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold uppercase tracking-wider text-[10px] bg-sky-200 dark:bg-sky-700/50 px-2 py-0.5 rounded-full">Up Next</span>
-                        <span className="font-medium truncate max-w-[200px]">{next.title} {next.venue ? `at ${next.venue}` : ''}</span>
-                        <span className="opacity-75">in {minsUntil}m</span>
-                    </div>
-                    <button onClick={() => setShowUpNext(false)} className="opacity-60 hover:opacity-100 p-1"><X size={14}/></button>
-                </div>
-            );
-        })()}
       </header>
       {notification && (
         <div className={`fixed bottom-10 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 z-50 font-medium 
@@ -1035,13 +1181,6 @@ const MainApp = () => {
                             Schedule is optimal for {selectedDay}.
                         </div>
                     )}
-                </div>
-
-                <div className="bg-gradient-to-br from-indigo-600 to-slate-800 dark:from-indigo-900 dark:to-slate-900 rounded-2xl border border-indigo-200 dark:border-indigo-500/30 p-5 text-white">
-                    <h3 className="font-bold mb-2 text-indigo-100 dark:text-indigo-200">Pro Tip</h3>
-                    <p className="text-indigo-100/80 dark:text-indigo-200/70 text-sm mb-0 leading-relaxed">
-                        Click the Music icon (🎵) in the top bar to upload your own custom notification sound!
-                    </p>
                 </div>
             </div>
 
