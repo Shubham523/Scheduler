@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen, 
   Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle, 
   Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, Music,
-  Minimize2, Code, Sun, Moon, LogIn, LogOut, MoreVertical 
+  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, RefreshCw,MoreVertical 
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -42,6 +42,8 @@ const CATEGORIES = {
   health: { label: "Health", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-200 border-emerald-500/30", barColor: "bg-emerald-500", icon: Activity },
   leisure: { label: "Leisure", color: "bg-orange-500/10 text-orange-600 dark:text-orange-200 border-orange-500/30", barColor: "bg-orange-500", icon: Coffee },
   chore: { label: "Chores", color: "bg-slate-200 dark:bg-slate-700/30 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600/30", barColor: "bg-slate-500", icon: Layout },
+  empty: { label: "Empty", color: "bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-300 dark:border-slate-700 dashed border-2", barColor: "bg-slate-400", icon: SquareDashedBottom },
+  google: { label: "G-Cal", color: "bg-sky-500/10 text-sky-600 dark:text-sky-300 border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]", barColor: "bg-sky-400", icon: Calendar }
 };
 
 // --- Helper Functions ---
@@ -344,136 +346,102 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 border-t sm:border border-gray-200 dark:border-slate-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom sm:zoom-in duration-300">
-        
-        {/* Modal Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-slate-800/50 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className={`p-1.5 rounded-lg ${initialData ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20' : 'bg-sky-100 text-sky-600 dark:bg-sky-500/20'}`}>
-              {initialData ? <Edit2 size={16} /> : <Plus size={16} />}
-            </div>
-            <h3 className="text-base font-bold text-gray-800 dark:text-slate-100">{initialData ? 'Edit Task' : 'New Task'}</h3>
-          </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100">{initialData ? 'Edit Task' : 'Add New Task'}</h3>
+          <button onClick={onClose} className="text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300">
             <X size={20} />
           </button>
         </div>
         
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
-          <div className="space-y-4">
-            
-            {/* Task Name */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">Task Details</label>
-              <input 
-                type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 focus:bg-white dark:focus:bg-slate-900 rounded-xl p-3 text-sm text-gray-800 dark:text-slate-200 outline-none transition-all"
-                placeholder="What are you doing? (e.g. Physics Class)" autoFocus
-              />
-              <input 
-                type="text" value={formData.venue || ''} onChange={(e) => setFormData({...formData, venue: e.target.value})}
-                className="w-full mt-2 bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 focus:bg-white dark:focus:bg-slate-900 rounded-xl p-3 text-sm text-gray-800 dark:text-slate-200 outline-none transition-all"
-                placeholder="Where? (e.g. LT-3, Physics Lab)"
-              />
-            </div>
+        <div className="space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Task Name</label>
+            <input 
+              type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
+              className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
+              placeholder="e.g. Physics Class" autoFocus
+            />
+          </div>
 
-            {/* Overlap Prevention */}
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-colors cursor-pointer" onClick={() => setFormData({...formData, isBusy: !formData.isBusy})}>
-               <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${formData.isBusy ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-gray-200 text-gray-500 dark:bg-slate-800'}`}>
-                    <AlertTriangle size={14} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Prevent Overlaps</p>
-                    <p className="text-[10px] text-gray-500 dark:text-slate-400">Mark as busy during this time</p>
-                  </div>
-               </div>
-               <input 
-                   type="checkbox" checked={formData.isBusy}
-                   onChange={(e) => setFormData({...formData, isBusy: e.target.checked})}
-                   className="w-4 h-4 rounded bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
-                   onClick={(e) => e.stopPropagation()}
-               />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 mt-4 uppercase">Venue / Classroom</label>
+            <input 
+              type="text" value={formData.venue || ''} onChange={(e) => setFormData({...formData, venue: e.target.value})}
+              className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
+              placeholder="e.g. LT-3, Physics Lab (Optional)"
+            />
+          </div>
 
-            {/* Schedule Section */}
-            <div>
-               <div className="flex justify-between items-center mb-2">
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Schedule</label>
-                  <button 
-                    onClick={() => setFormData(prev => ({ ...prev, isRecurring: !prev.isRecurring, days: !prev.isRecurring ? prev.days : [currentDay] }))}
-                    className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all ${formData.isRecurring ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                  >
-                    {formData.isRecurring ? 'RECURRING' : 'ONCE'}
+          <div className="flex items-center gap-2 mt-2">
+             <input 
+                 type="checkbox" id="isBusy" checked={formData.isBusy}
+                 onChange={(e) => setFormData({...formData, isBusy: e.target.checked})}
+                 className="rounded bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
+             />
+             <label htmlFor="isBusy" className="text-xs text-gray-600 dark:text-slate-300 cursor-pointer select-none">Mark as Busy (Prevents overlaps)</label>
+          </div>
+          <div>
+             <div className="flex justify-between items-center mb-4">
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Schedule</label>
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" id="recurring" checked={formData.isRecurring}
+                        onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            setFormData(prev => ({ ...prev, isRecurring: isChecked, days: isChecked ? prev.days : [currentDay] }));
+                        }}
+                        className="rounded bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
+                    />
+                    <label htmlFor="recurring" className="text-xs text-gray-600 dark:text-slate-300 cursor-pointer select-none">Repeat Weekly</label>
+                </div>
+             </div>
+
+             {formData.isRecurring ? (
+                <div className="flex justify-between gap-1 p-1 bg-gray-50 dark:bg-slate-950 rounded-lg border border-gray-200 dark:border-slate-800">
+                    {DAYS_OF_WEEK.map(day => (
+                        <button key={day} onClick={() => toggleDay(day)} className={`w-8 h-8 text-xs rounded-md transition-all ${formData.days.includes(day) ? 'bg-sky-600 text-white shadow-sm' : 'text-gray-500 dark:text-slate-500 hover:bg-gray-200 dark:hover:bg-slate-800'}`}>
+                            {day[0]}
+                        </button>
+                    ))}
+                </div>
+             ) : (
+                <div className="text-sm text-gray-600 dark:text-slate-300 p-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-lg flex items-center gap-2">
+                    <Calendar size={14} className="text-gray-400 dark:text-slate-500" />
+                    {formData.days[0] || currentDay}
+                </div>
+             )}
+          </div>
+
+          <div>
+             <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Category</label>
+             <div className="grid grid-cols-3 gap-2">
+                {Object.entries(CATEGORIES).map(([key, cat]) => (
+                  <button key={key} onClick={() => setFormData({...formData, category: key})} className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs transition-all ${formData.category === key ? `${cat.color} border-current ring-1 ring-current` : 'border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 text-gray-500 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800'}`}>
+                    <cat.icon size={16} className="mb-1" />
+                    {cat.label}
                   </button>
-               </div>
+                ))}
+             </div>
+          </div>
 
-               {formData.isRecurring ? (
-                  <div className="flex justify-between gap-1 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent">
-                      {DAYS_OF_WEEK.map(day => (
-                          <button key={day} onClick={() => toggleDay(day)} className={`flex-1 aspect-square sm:aspect-auto sm:h-9 text-[10px] font-bold rounded-lg transition-all ${formData.days.includes(day) ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
-                              {day[0]}
-                          </button>
-                      ))}
-                  </div>
-               ) : (
-                  <div className="text-xs font-semibold text-gray-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl flex items-center gap-3">
-                      <Calendar size={14} className="text-sky-500" />
-                      {formData.days[0] || currentDay}
-                  </div>
-               )}
-            </div>
-
-            {/* Time Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">Start</label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                  <input type="time" value={formData.start} onChange={(e) => setFormData({...formData, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">End</label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                  <input type="time" value={formData.end} onChange={(e) => setFormData({...formData, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Category Grid */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
-               <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 mb-2 uppercase tracking-wider">Category</label>
-               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.entries(CATEGORIES).map(([key, cat]) => (
-                    <button 
-                      key={key} 
-                      onClick={() => setFormData({...formData, category: key})} 
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${formData.category === key 
-                        ? `${cat.color} border-current ring-1 ring-current` 
-                        : 'border-transparent bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
-                    >
-                      <cat.icon size={14} />
-                      <span className="text-[10px] font-bold uppercase tracking-tight">{cat.label}</span>
-                    </button>
-                  ))}
-               </div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">Start Time</label>
+              <input type="time" value={formData.start} onChange={(e) => setFormData({...formData, start: e.target.value})} className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 uppercase">End Time</label>
+              <input type="time" value={formData.end} onChange={(e) => setFormData({...formData, end: e.target.value})} className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg p-3 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none" />
             </div>
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-gray-100 dark:border-slate-800/50 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 py-3 text-sm font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">Cancel</button>
-          <button 
-            onClick={() => onSave(formData)} 
-            disabled={!formData.title} 
-            className="flex-[2] py-3 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-sky-600/20 flex justify-center items-center gap-2"
-          >
-            <Save size={16} /> {initialData ? 'Update Task' : 'Create Task'}
+        <div className="flex gap-3 mt-8">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-medium hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+          <button onClick={() => onSave(formData)} disabled={!formData.title} className="flex-1 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2">
+            <Save size={18} /> Save Task
           </button>
         </div>
       </div>
@@ -502,6 +470,8 @@ const MainApp = () => {
   });
 
   const [user, setUser] = useState(null);
+  const [gcalEvents, setGcalEvents] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
@@ -509,22 +479,84 @@ const MainApp = () => {
         const docRef = doc(db, "userSchedules", u.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().events) setEvents(docSnap.data().events);
+        fetchGCal(localStorage.getItem('gcalToken'));
       }
     });
     return () => unsubscribe();
   }, []);
-
+  const handleSync = async () => {
+    const success = await fetchGCal();
+    if (!success) {
+      // Token expired or missing, trigger re-auth without logout
+      handleLogin();
+    } else {
+      showNotification("Calendar synced!");
+    }
+  };
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
     try {
-      await signInWithPopup(auth, provider);
-      showNotification("Logged in successfully!");
+      // If popup still fails due to COOP, you can use signInWithRedirect(auth, provider)
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential.accessToken;
+      localStorage.setItem('gcalToken', token);
+      fetchGCal(token);
+      showNotification("Logged in and synced!");
     } catch (err) { 
       console.error("LOGIN ERROR:", err);
       showNotification("Login failed. Check console.", "error"); 
     }
   };
 
+  const fetchGCal = async (token = localStorage.getItem('gcalToken')) => {
+    if (!token) return false;
+    setIsSyncing(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setDate(end.getDate() + 7);
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (res.status === 401) {
+        localStorage.removeItem('gcalToken');
+        setIsSyncing(false);
+        return false; // Signal that we need a new token
+      }
+
+      const data = await res.json();
+      if (data.items) {
+        const formatted = data.items.map(item => {
+          const startDT = new Date(item.start.dateTime || item.start.date);
+          const endDT = new Date(item.end.dateTime || item.end.date);
+          const dayName = DAYS_OF_WEEK[startDT.getDay() === 0 ? 6 : startDT.getDay() - 1];
+
+          return {
+            id: item.id,
+            title: item.summary,
+            category: 'google',
+            start: startDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            end: endDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            days: [dayName], 
+            isBusy: item.transparency !== 'transparent'
+          };
+        });
+        setGcalEvents(formatted);
+      }
+      setIsSyncing(false);
+      return true;
+    } catch (e) { 
+      console.error("FETCH ERROR:", e); 
+      setIsSyncing(false);
+      return false;
+    }
+  };
   const [selectedDay, setSelectedDay] = useState(() => {
   const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return dayMap[new Date().getDay()];
@@ -837,6 +869,15 @@ const MainApp = () => {
     setIsModalOpen(true);
   };
 
+  const handleQuickAddEmpty = () => {
+    const slot = findNextFreeSlot(selectedDay);
+    const newEvent = { id: Date.now(), title: "Empty Slot", category: "empty", start: slot.start, end: slot.end, days: [selectedDay] };
+    const overlap = checkOverlap(newEvent);
+    
+    if (overlap) return showNotification("Schedule full! Cannot add empty block.", "error");
+    updateSchedule([...events, newEvent]);
+    showNotification("Added Empty Block at " + slot.start);
+  };
 
   const openEditModal = (event) => {
     setEditingEvent(event);
@@ -875,8 +916,9 @@ const MainApp = () => {
   };
 
   const displayedEvents = useMemo(() => {
-    return events.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-  }, [events, selectedDay]);
+    const all = [...events, ...gcalEvents];
+    return all.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+  }, [events, gcalEvents, selectedDay]);
 
   const stats = useMemo(() => {
     const totalMinutes = displayedEvents.reduce((acc, curr) => acc + getDuration(curr.start, curr.end), 0);
@@ -991,6 +1033,15 @@ const MainApp = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
+              {user && (
+                <button 
+                  onClick={handleSync} 
+                  className={`p-2 rounded-lg text-slate-500 hover:text-sky-500 transition-colors ${isSyncing ? 'animate-spin' : ''}`}
+                  title="Refresh Calendar"
+                >
+                  <RefreshCw size={18}/>
+                </button>
+)}
 
               <button 
                 onClick={toggleNotifications} 
