@@ -581,6 +581,27 @@ const MainApp = () => {
           };
         });
         setGcalEvents(formatted);
+        // Mirror to Cloud for Push Notifications
+        const storageId = user ? user.uid : deviceId;
+        const docRef = doc(db, "userSchedules", storageId);
+        const docSnap = await getDoc(docRef);
+        const currentData = docSnap.exists() ? docSnap.data() : { events: [] };
+        
+        // Combine active minutes for both internal and gcal events
+        const allEvents = [...(currentData.events || []), ...formatted];
+        const activeMinutes = Array.from(new Set(
+          allEvents.map(e => {
+            const [h, m] = e.start.split(':').map(Number);
+            return h * 60 + m;
+          })
+        ));
+
+        await setDoc(docRef, {
+          ...currentData,
+          gcalEvents: formatted,
+          activeMinutes: activeMinutes,
+          updatedAt: new Date()
+        });
       }
       setIsSyncing(false);
       return true;
@@ -622,7 +643,16 @@ const MainApp = () => {
       return true;
   });
 
-  const [notifiedEvents, setNotifiedEvents] = useState(new Set());
+  const [notifiedEvents, setNotifiedEvents] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lifeSyncNotifiedEvents');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) { return new Set(); }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('lifeSyncNotifiedEvents', JSON.stringify([...notifiedEvents]));
+  }, [notifiedEvents]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
@@ -632,16 +662,19 @@ const MainApp = () => {
     setEvents(newEvents); 
     try {
       if (deviceId) {
-        // Optimization: Create a unique list of all start times in minutes
+        const storageId = user ? user.uid : deviceId;
+        // Optimization: Create a unique list of all start times in minutes from BOTH sources
+        const allEvents = [...newEvents, ...gcalEvents];
         const activeMinutes = Array.from(new Set(
-          newEvents.map(e => {
+          allEvents.map(e => {
             const [h, m] = e.start.split(':').map(Number);
             return h * 60 + m;
           })
         ));
-        await setDoc(doc(db, "userSchedules", user ? user.uid : deviceId), {
+        await setDoc(doc(db, "userSchedules", storageId), {
           events: newEvents,
-          activeMinutes: activeMinutes, // New Attribute
+          gcalEvents: gcalEvents, // Keep mirrored copy
+          activeMinutes: activeMinutes,
           updatedAt: new Date()
         });
       }
@@ -751,9 +784,13 @@ const MainApp = () => {
                 const diff = eventStartMins - currentTimeInMins;
                 const eventUid = `${event.id}-${todayStr}`; 
 
-                if (diff > 0 && diff <= 5 && !notifiedEvents.has(eventUid)) {
+                if (diff > 0 && diff <= 10 && !notifiedEvents.has(eventUid)) {
                     triggerAlert(event.title, `Starting in ${diff} minutes (${event.start})`);
-                    setNotifiedEvents(prev => new Set(prev).add(eventUid));
+                    setNotifiedEvents(prev => {
+                      const next = new Set(prev);
+                      next.add(eventUid);
+                      return next;
+                    });
                 }
             }
         });
@@ -808,8 +845,10 @@ const MainApp = () => {
       });
     
       if (currentToken) {
-        await setDoc(doc(db, "deviceTokens", deviceId), {
+        const storageId = user ? user.uid : deviceId;
+        await setDoc(doc(db, "deviceTokens", storageId), {
           token: currentToken,
+          userId: user ? user.uid : null, // Store relationship
           updatedAt: new Date()
         });
         setNotificationsEnabled(true);
@@ -1086,7 +1125,7 @@ const MainApp = () => {
                 {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
               </button>
 
-              <button onClick={() => { setEditingEvent(null); setIsModalOpen(true); }} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform">
+              <button onClick={openAddModal} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform">
                 <Plus size={18}/>
               </button>
 

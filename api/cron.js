@@ -72,11 +72,13 @@ export default async function handler(req, res) {
       const deviceId = userDoc.id;
       const userData = userDoc.data();
       const events = userData.events || [];
+      const gcalEvents = userData.gcalEvents || [];
+      const allEvents = [...events, ...gcalEvents];
 
       // Dedup: check the lastNotified map stored on this same document
       const lastNotified = userData.lastNotified || {};
 
-      for (const event of events) {
+      for (const event of allEvents) {
         const isTimeMatch = event.start === searchTimeStr;
         const isDayMatch = event.days && event.days.includes(currentDay);
 
@@ -117,7 +119,7 @@ export default async function handler(req, res) {
                 });
                 notificationsSent++;
 
-                // Mark as sent on the SAME userSchedules doc (no extra collection)
+                // Mark as sent on the SAME userSchedules doc
                 await db
                   .collection("userSchedules")
                   .doc(deviceId)
@@ -136,24 +138,16 @@ export default async function handler(req, res) {
           promises.push(tokenPromise);
         }
       }
+      
+      // Cleanup old dedup keys once a day (at midnight IST hour 0 for current batch)
+      if (hours === 0 && minutes === 0 && userData.lastNotified) {
+         promises.push(db.collection("userSchedules").doc(deviceId).update({
+           lastNotified: {}
+         }));
+      }
     }
 
     await Promise.allSettled(promises);
-
-    // Cleanup old dedup keys once a day (at midnight IST hour 0)
-    if (hours === 0 && minutes === 0) {
-      for (const userDoc of snapshot.docs) {
-        const userData = userDoc.data();
-        if (
-          userData.lastNotified &&
-          Object.keys(userData.lastNotified).length > 0
-        ) {
-          await db.collection("userSchedules").doc(userDoc.id).update({
-            lastNotified: {},
-          });
-        }
-      }
-    }
 
     return res.status(200).json({
       success: true,
