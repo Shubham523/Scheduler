@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Reorder, useDragControls } from 'framer-motion';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 import { getMessaging, getToken } from "firebase/messaging";
@@ -95,21 +96,21 @@ const sendSystemNotification = (title, options) => {
 const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   const catConfig = CATEGORIES[event.category] || CATEGORIES.work;
   const Icon = catConfig.icon;
+  const dragControls = useDragControls();
 
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
-  const isSwipeLockedIn = useRef(false);   // true once we commit to horizontal swipe
-  const isScrollIntent = useRef(false);     // true once we detect vertical scroll intent
+  const isSwipeLockedIn = useRef(false);   
+  const isScrollIntent = useRef(false);     
   const rafId = useRef(null);
   const cardRef = useRef(null);
 
-  const DEAD_ZONE = 15;       // px before deciding swipe vs scroll
-  const DELETE_THRESHOLD = 120; // px to trigger delete
-  const RESISTANCE_POINT = 140; // px where rubber-band resistance kicks in
+  const DEAD_ZONE = 15;       
+  const DELETE_THRESHOLD = 120; 
+  const RESISTANCE_POINT = 140; 
 
-  // Attach touchmove as non-passive so e.preventDefault() works
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -132,22 +133,17 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
     const diffX = currentX - touchStartX.current;
     const diffY = currentY - touchStartY.current;
 
-    // Dead zone: decide intent before doing anything
     if (!isSwipeLockedIn.current) {
-      if (Math.abs(diffX) < DEAD_ZONE && Math.abs(diffY) < DEAD_ZONE) return; // still in dead zone
+      if (Math.abs(diffX) < DEAD_ZONE && Math.abs(diffY) < DEAD_ZONE) return; 
       if (Math.abs(diffY) > Math.abs(diffX)) {
-        // Vertical movement dominates → user is scrolling, bail out
         isScrollIntent.current = true;
         return;
       }
-      // Horizontal dominates → commit to swipe
       isSwipeLockedIn.current = true;
     }
 
-    // Prevent page scroll while swiping horizontally
     e.preventDefault();
 
-    // Apply rubber-band resistance past RESISTANCE_POINT
     if (rafId.current) cancelAnimationFrame(rafId.current);
     rafId.current = requestAnimationFrame(() => {
       let offset;
@@ -160,7 +156,6 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
 
   const handleTouchEnd = () => {
     if (rafId.current) cancelAnimationFrame(rafId.current);
-    // Both directions trigger a delete!
     if (Math.abs(swipeOffset) > DELETE_THRESHOLD) {
       triggerDelete(swipeOffset > 0 ? 1 : -1);
     } else {
@@ -173,7 +168,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   };
 
   const triggerDelete = (direction = -1) => {
-    setSwipeOffset(direction * 500); // Fly fully off in the swiped direction
+    setSwipeOffset(direction * 500); 
     setIsExiting(true);   
     
     setTimeout(() => {
@@ -181,38 +176,40 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
     }, 300);
   };
 
-  // Math for the background animations based on pull distance
   const progress = Math.min(Math.abs(swipeOffset) / DELETE_THRESHOLD, 1);
   const circleSize = Math.min(Math.abs(swipeOffset), 56); 
   const iconScale = 0.5 + (progress * 0.5); 
 
   return (
-    <div className={`relative overflow-hidden transition-all duration-300 ease-out
-      ${isExiting ? 'max-h-0 opacity-0 mb-0' : 'max-h-[250px] opacity-100 mb-3'}
-    `}>
+    <Reorder.Item
+      value={event}
+      id={event.id}
+      dragListener={false}
+      dragControls={dragControls}
+      whileDrag={{ scale: 1.02, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
+      className={`relative overflow-hidden transition-all duration-300 ease-out
+        ${isExiting ? 'max-h-0 opacity-0 mb-0' : 'max-h-[250px] opacity-100 mb-3'}
+      `}
+    >
       
-      {/* THE NEW BACKGROUND REVEAL LAYER */}
       <div className={`absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0 transition-opacity duration-150 ${swipeOffset !== 0 || isExiting ? 'opacity-100' : 'opacity-0'}`}>
-         {/* Left Dustbin (Revealed when swiping right, swipeOffset > 0) */}
          <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset > 0 ? 'opacity-100' : 'opacity-0'}`}>
             <div 
                className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
                style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
             />
-            <Trash2 className="text-white relative z-10 transition-transform duration-75 ease-out" style={{ transform: `scale(${iconScale})` }} />
+            <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
          </div>
 
-         {/* Right Dustbin (Revealed when swiping left, swipeOffset < 0) */}
          <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset < 0 ? 'opacity-100' : 'opacity-0'}`}>
             <div 
                className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
                style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
             />
-            <Trash2 className="text-white relative z-10 transition-transform duration-75 ease-out" style={{ transform: `scale(${iconScale})` }} />
+            <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
          </div>
       </div>
 
-      {/* THE DRAGGABLE CARD LAYER */}
       <div 
         ref={cardRef}
         onTouchStart={event.category !== 'google' ? handleTouchStart : undefined}
@@ -225,12 +222,14 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
         rounded-xl h-full w-full flex items-center z-10`}
       >
 
-        {/* LEFT HINT: ⟨ */}
-        <div className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}>
+        {/* LEFT HANDLE */}
+        <div 
+          onPointerDown={(e) => dragControls.start(e)}
+          className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
+        >
           ⟨
         </div>
 
-        {/* MAIN CONTENT */}
         <div className="flex justify-between items-start gap-3 flex-1 min-w-0 px-1">
           <div className="flex gap-4 min-w-0 flex-1">
             <div className="mt-1 flex-shrink-0">
@@ -254,7 +253,6 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
             </div>
           </div>
 
-          {/* DESKTOP BUTTONS (Fallback for non-touch users) */}
           <div className="flex gap-1 opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button 
               onClick={(e) => { e.stopPropagation(); onEdit(event); }} 
@@ -273,13 +271,16 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
           </div>
         </div>
 
-        {/* RIGHT HINT: ⟩ */}
-        <div className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}>
+        {/* RIGHT HANDLE */}
+        <div 
+          onPointerDown={(e) => dragControls.start(e)}
+          className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
+        >
           ⟩
         </div>
 
       </div>
-    </div>
+    </Reorder.Item>
   );
 };
 
@@ -987,9 +988,27 @@ const MainApp = () => {
     e.target.value = null; 
   };
 
+  const handleReorder = (reorderedDayEvents) => {
+    // 1. Filter out G-Cal events from the reordered list (they are read-only/mirrored)
+    const internalReordered = reorderedDayEvents.filter(e => e.category !== 'google');
+    
+    // 2. Map reordered events back into the global list
+    const reorderedIds = new Set(internalReordered.map(e => e.id));
+    const filteredGlobal = events.filter(e => !reorderedIds.has(e.id));
+    
+    updateSchedule([...filteredGlobal, ...internalReordered]);
+  };
+
   const displayedEvents = useMemo(() => {
-    const all = [...events, ...gcalEvents];
-    return all.filter(e => (e.days && e.days.includes(selectedDay))).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    // Merge internal and G-Cal events for current day
+    const dayInternal = events.filter(e => e.days && e.days.includes(selectedDay));
+    const dayGcal = gcalEvents.filter(e => e.days && e.days.includes(selectedDay));
+    
+    // IMPORTANT: We do NOT force a time-sort for internal events anymore,
+    // but we do sort G-Cal events by time since they are external.
+    const sortedGcal = [...dayGcal].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    
+    return [...dayInternal, ...sortedGcal];
   }, [events, gcalEvents, selectedDay]);
 
   const stats = useMemo(() => {
@@ -1221,7 +1240,12 @@ const MainApp = () => {
                                 <button onClick={openAddModal} className="mt-4 text-sky-500 hover:text-sky-400 text-sm font-medium">+ Create one now</button>
                             </div>
                         ) : (
-                            <div className="relative ml-2 space-y-2">
+                            <Reorder.Group 
+                              axis="y" 
+                              values={displayedEvents} 
+                              onReorder={handleReorder}
+                              className="relative ml-2 space-y-2"
+                            >
                                 {displayedEvents.map((event) => {
                                   const startMins = timeToMinutes(event.start);
                                   const endMins = timeToMinutes(event.end);
@@ -1242,7 +1266,7 @@ const MainApp = () => {
                                     />
                                   );
                                 })}
-                            </div>
+                            </Reorder.Group>
                         )}
                     </div>
             </div>
