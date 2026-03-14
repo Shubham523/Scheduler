@@ -15,6 +15,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   try {
     const now = new Date();
     // Offset for IST (UTC + 5:30)
@@ -29,6 +33,7 @@ export default async function handler(req, res) {
 
     // Format for matching the 'start' string (HH:mm)
     const searchTimeStr = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+    console.log(`Target Search Time: ${searchTimeStr}`);
 
     // Format for the optimized query (integer minutes from midnight)
     const targetMinutesTotal = hours * 60 + minutes;
@@ -61,6 +66,7 @@ export default async function handler(req, res) {
         .json({
           success: true,
           message: "No relevant schedules found for this minute.",
+          timestamp: now.toISOString(),
         });
     }
 
@@ -154,9 +160,10 @@ export default async function handler(req, res) {
       processed: notificationsSent,
       skipped: skippedDuplicates,
       reads: snapshot.size,
+      timestamp: now.toISOString(),
     });
   } catch (error) {
     console.error("CRON ERROR:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
   }
 }
