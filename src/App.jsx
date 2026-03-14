@@ -1144,7 +1144,7 @@ const MainApp = () => {
                 {notificationsEnabled ? <Bell size={18} /> : <BellOff size={18} />}
               </button>
 
-              <button onClick={openAddModal} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform">
+              <button onClick={openAddModal} className="bg-sky-600 p-2 rounded-lg text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform" title="Add Event">
                 <Plus size={18}/>
               </button>
 
@@ -1158,7 +1158,7 @@ const MainApp = () => {
 
               {/* 3-Dot Menu */}
               <div className="relative" ref={menuRef}>
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Menu">
                   <MoreVertical size={20} />
                 </button>
 
