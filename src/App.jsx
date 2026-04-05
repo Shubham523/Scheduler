@@ -658,7 +658,7 @@ const MainApp = () => {
     if (activeAlert) return;
 
     setActiveAlert({ title, message });
-    sendSystemNotification(`Alert: ${title}`, { body: message, icon: '/vite.svg', requireInteraction: true });
+    sendSystemNotification(`Alert: ${title}`, { body: message, icon: '/LifeSync.png', requireInteraction: true });
     flashTabTitle(`Alert: ${title}`, flashStopRef);
 
     if (customSoundUrl) {
