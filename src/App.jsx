@@ -1062,7 +1062,7 @@ const MainApp = () => {
           <div className="flex items-center justify-between py-2.5 mb-2.5">
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <div className="text-white shadow-lg shadow-sky-500/20">
+              <div className="text-white shadow-lg ">
                 <img src="/LifeSync.png" alt="Logo" className="w-6 h-6" />
               </div>
               <h1 className="font-bold text-lg">LifeSync</h1>

@@ -1,0 +1,17 @@
+{
+  "name": "LifeSync",
+  "short_name": "LifeSync",
+  "description": "Your personal scheduler to organize tasks, events, and weekly routines.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/LifeSync.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
