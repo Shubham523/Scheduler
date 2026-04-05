@@ -4,11 +4,11 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 import { getMessaging, getToken } from "firebase/messaging";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
-import { 
-  Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen, 
-  Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle, 
+import {
+  Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen,
+  Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle,
   Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, Music,
-  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, MoreVertical 
+  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, MoreVertical
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -24,9 +24,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const messaging = typeof window !== 'undefined' && 
-                  'serviceWorker' in navigator && 
-                  window.isSecureContext ? getMessaging(app) : null;
+const messaging = typeof window !== 'undefined' &&
+  'serviceWorker' in navigator &&
+  window.isSecureContext ? getMessaging(app) : null;
 
 // --- Constants ---
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -72,7 +72,7 @@ const flashTabTitle = (message, stopRef) => {
     document.title = isOriginal ? "🔔 " + message : originalTitle;
     isOriginal = !isOriginal;
   }, 1000);
-  
+
   stopRef.current = () => {
     clearInterval(interval);
     document.title = originalTitle;
@@ -92,7 +92,7 @@ const sendSystemNotification = (title, options) => {
 };
 
 // --- Components ---
-const EventCard = ({ event, onDelete, onEdit, isActive }) => {
+const EventCard = ({ event, onDelete, onEdit, isActive, onDragEnd }) => {
   const catConfig = CATEGORIES[event.category] || CATEGORIES.work;
   const Icon = catConfig.icon;
   const dragControls = useDragControls();
@@ -101,14 +101,14 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   const [isExiting, setIsExiting] = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
-  const isSwipeLockedIn = useRef(false);   
-  const isScrollIntent = useRef(false);     
+  const isSwipeLockedIn = useRef(false);
+  const isScrollIntent = useRef(false);
   const rafId = useRef(null);
   const cardRef = useRef(null);
 
-  const DEAD_ZONE = 15;       
-  const DELETE_THRESHOLD = 120; 
-  const RESISTANCE_POINT = 140; 
+  const DEAD_ZONE = 15;
+  const DELETE_THRESHOLD = 120;
+  const RESISTANCE_POINT = 140;
 
   useEffect(() => {
     const el = cardRef.current;
@@ -133,7 +133,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
     const diffY = currentY - touchStartY.current;
 
     if (!isSwipeLockedIn.current) {
-      if (Math.abs(diffX) < DEAD_ZONE && Math.abs(diffY) < DEAD_ZONE) return; 
+      if (Math.abs(diffX) < DEAD_ZONE && Math.abs(diffY) < DEAD_ZONE) return;
       if (Math.abs(diffY) > Math.abs(diffX)) {
         isScrollIntent.current = true;
         return;
@@ -167,17 +167,17 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
   };
 
   const triggerDelete = (direction = -1) => {
-    setSwipeOffset(direction * 500); 
-    setIsExiting(true);   
-    
+    setSwipeOffset(direction * 500);
+    setIsExiting(true);
+
     setTimeout(() => {
-        onDelete(event.id);
+      onDelete(event.id);
     }, 300);
   };
 
   const progress = Math.min(Math.abs(swipeOffset) / DELETE_THRESHOLD, 1);
-  const circleSize = Math.min(Math.abs(swipeOffset), 56); 
-  const iconScale = 0.5 + (progress * 0.5); 
+  const circleSize = Math.min(Math.abs(swipeOffset), 56);
+  const iconScale = 0.5 + (progress * 0.5);
 
   return (
     <Reorder.Item
@@ -185,31 +185,32 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
       id={event.id}
       dragListener={false}
       dragControls={dragControls}
-      whileDrag={{ scale: 1.02, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
+      onDragEnd={onDragEnd}
+      whileDrag={{ scale: 1.065, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
       className={`relative overflow-hidden transition-all duration-300 ease-out
         ${isExiting ? 'max-h-0 opacity-0 mb-0' : 'max-h-[250px] opacity-100 mb-3'}
       `}
     >
-      
-      <div className={`absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0 transition-opacity duration-150 ${swipeOffset !== 0 || isExiting ? 'opacity-100' : 'opacity-0'}`}>
-         <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset > 0 ? 'opacity-100' : 'opacity-0'}`}>
-            <div 
-               className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
-               style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
-            />
-            <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
-         </div>
 
-         <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset < 0 ? 'opacity-100' : 'opacity-0'}`}>
-            <div 
-               className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
-               style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
-            />
-            <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
-         </div>
+      <div className={`absolute inset-0 bg-red-400 dark:bg-red-500 rounded-xl flex items-center justify-between px-6 z-0 transition-opacity duration-150 ${swipeOffset !== 0 || isExiting ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset > 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <div
+            className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
+            style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
+          />
+          <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
+        </div>
+
+        <div className={`relative flex items-center justify-center transition-opacity duration-75 ${swipeOffset < 0 ? 'opacity-100' : 'opacity-0'}`}>
+          <div
+            className="absolute bg-white/20 rounded-full transition-all duration-75 ease-out"
+            style={{ width: `${circleSize}px`, height: `${circleSize}px`, opacity: progress }}
+          />
+          <Trash2 className="text-white relative z-10" style={{ transform: `scale(${iconScale})` }} />
+        </div>
       </div>
 
-      <div 
+      <div
         ref={cardRef}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -222,7 +223,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
       >
 
         {/* LEFT HANDLE */}
-        <div 
+        <div
           onPointerDown={(e) => dragControls.start(e)}
           style={{ touchAction: 'none' }}
           className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
@@ -254,16 +255,16 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
           </div>
 
           <div className="flex gap-1 opacity-0 sm:group-hover:opacity-100 transition-opacity">
-            <button 
-              onClick={(e) => { e.stopPropagation(); onEdit(event); }} 
-              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors" 
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(event); }}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-300 transition-colors"
               title="Edit Task"
             >
               <Edit2 size={16} />
             </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); triggerDelete(-1); }} 
-              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors" 
+            <button
+              onClick={(e) => { e.stopPropagation(); triggerDelete(-1); }}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-red-500 dark:text-red-400 transition-colors"
               title="Delete Task"
             >
               <Trash2 size={16} />
@@ -272,7 +273,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
         </div>
 
         {/* RIGHT HANDLE */}
-        <div 
+        <div
           onPointerDown={(e) => dragControls.start(e)}
           style={{ touchAction: 'none' }}
           className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
@@ -324,7 +325,7 @@ const StatsRing = ({ percentage, colorClass, label }) => {
 };
 
 const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialStart, initialEnd }) => {
-  const [formData, setFormData] = useState({ 
+  const [formData, setFormData] = useState({
     title: '', category: 'work', start: '09:00', end: '10:00', days: [currentDay], isRecurring: false, venue: '', isBusy: true
   });
 
@@ -338,9 +339,9 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
 
   const toggleDay = (day) => {
     if (formData.days.includes(day)) {
-        if (formData.days.length > 1) setFormData(prev => ({ ...prev, days: prev.days.filter(d => d !== day) }));
+      if (formData.days.length > 1) setFormData(prev => ({ ...prev, days: prev.days.filter(d => d !== day) }));
     } else {
-        setFormData(prev => ({ ...prev, days: [...prev.days, day] }));
+      setFormData(prev => ({ ...prev, days: [...prev.days, day] }));
     }
   };
 
@@ -349,7 +350,7 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-white dark:bg-slate-900 border-t sm:border border-gray-200 dark:border-slate-800 w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom sm:zoom-in duration-300">
-        
+
         {/* Modal Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-100 dark:border-slate-800/50 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -362,71 +363,71 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
             <X size={20} />
           </button>
         </div>
-        
+
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
           <div className="space-y-4">
-            
+
             {/* Task Name */}
             <div>
               <label className="block text-[10px] font-bold text-black dark:text-slate-400 mb-1.5 uppercase tracking-wider">Task Details</label>
-              <input 
-                type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})}
+              <input
+                type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 focus:bg-white dark:focus:bg-slate-900 rounded-xl p-3 text-sm text-gray-800 dark:text-slate-200 outline-none transition-all"
                 placeholder="What are you doing? (e.g. Physics Class)" autoFocus
               />
-              <input 
-                type="text" value={formData.venue || ''} onChange={(e) => setFormData({...formData, venue: e.target.value})}
+              <input
+                type="text" value={formData.venue || ''} onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                 className="w-full mt-2 bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 focus:bg-white dark:focus:bg-slate-900 rounded-xl p-3 text-sm text-gray-800 dark:text-slate-200 outline-none transition-all"
                 placeholder="Where? (e.g. LT-3, Physics Lab)"
               />
             </div>
 
             {/* Overlap Prevention */}
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-colors cursor-pointer" onClick={() => setFormData({...formData, isBusy: !formData.isBusy})}>
-               <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${formData.isBusy ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-gray-200 text-gray-500 dark:bg-slate-800'}`}>
-                    <AlertTriangle size={14} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Prevent Overlaps</p>
-                    <p className="text-[10px] text-gray-500 dark:text-slate-400">Mark as busy during this time</p>
-                  </div>
-               </div>
-               <input 
-                   type="checkbox" checked={formData.isBusy}
-                   onChange={(e) => setFormData({...formData, isBusy: e.target.checked})}
-                   className="w-4 h-4 rounded bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
-                   onClick={(e) => e.stopPropagation()}
-               />
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-colors cursor-pointer" onClick={() => setFormData({ ...formData, isBusy: !formData.isBusy })}>
+              <div className="flex items-center gap-3">
+                <div className={`p-1.5 rounded-lg ${formData.isBusy ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-gray-200 text-gray-500 dark:bg-slate-800'}`}>
+                  <AlertTriangle size={14} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Prevent Overlaps</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400">Mark as busy during this time</p>
+                </div>
+              </div>
+              <input
+                type="checkbox" checked={formData.isBusy}
+                onChange={(e) => setFormData({ ...formData, isBusy: e.target.checked })}
+                className="w-4 h-4 rounded bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
 
             {/* Schedule Section */}
             <div>
-               <div className="flex justify-between items-center mb-2">
-                  <label className="block text-[10px] font-bold text-black dark:text-slate-400 uppercase tracking-wider">Schedule</label>
-                  <button 
-                    onClick={() => setFormData(prev => ({ ...prev, isRecurring: !prev.isRecurring, days: !prev.isRecurring ? prev.days : [currentDay] }))}
-                    className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all ${formData.isRecurring ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                  >
-                    {formData.isRecurring ? 'RECURRING' : 'ONCE'}
-                  </button>
-               </div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-[10px] font-bold text-black dark:text-slate-400 uppercase tracking-wider">Schedule</label>
+                <button
+                  onClick={() => setFormData(prev => ({ ...prev, isRecurring: !prev.isRecurring, days: !prev.isRecurring ? prev.days : [currentDay] }))}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all ${formData.isRecurring ? 'bg-sky-100 text-sky-600 dark:bg-sky-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                >
+                  {formData.isRecurring ? 'RECURRING' : 'ONCE'}
+                </button>
+              </div>
 
-               {formData.isRecurring ? (
-                  <div className="flex justify-between gap-1 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent">
-                      {DAYS_OF_WEEK.map(day => (
-                          <button key={day} onClick={() => toggleDay(day)} className={`flex-1 aspect-square sm:aspect-auto sm:h-9 text-[10px] font-bold rounded-lg transition-all ${formData.days.includes(day) ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
-                              {day[0]}
-                          </button>
-                      ))}
-                  </div>
-               ) : (
-                  <div className="text-xs font-semibold text-gray-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl flex items-center gap-3">
-                      <Calendar size={14} className="text-sky-500" />
-                      {formData.days[0] || currentDay}
-                  </div>
-               )}
+              {formData.isRecurring ? (
+                <div className="flex justify-between gap-1 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-transparent">
+                  {DAYS_OF_WEEK.map(day => (
+                    <button key={day} onClick={() => toggleDay(day)} className={`flex-1 aspect-square sm:aspect-auto sm:h-9 text-[10px] font-bold rounded-lg transition-all ${formData.days.includes(day) ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'}`}>
+                      {day[0]}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs font-semibold text-gray-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl flex items-center gap-3">
+                  <Calendar size={14} className="text-sky-500" />
+                  {formData.days[0] || currentDay}
+                </div>
+              )}
             </div>
 
             {/* Time Grid */}
@@ -435,35 +436,35 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
                 <label className="block text-[10px] font-bold text-black dark:text-slate-400 mb-1.5 uppercase tracking-wider">Start</label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                  <input type="time" value={formData.start} onChange={(e) => setFormData({...formData, start: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
+                  <input type="time" value={formData.start} onChange={(e) => setFormData({ ...formData, start: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
                 </div>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-black dark:text-slate-400 mb-1.5 uppercase tracking-wider">End</label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                  <input type="time" value={formData.end} onChange={(e) => setFormData({...formData, end: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
+                  <input type="time" value={formData.end} onChange={(e) => setFormData({ ...formData, end: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-950 border border-transparent focus:border-sky-500/50 rounded-xl py-2.5 pl-9 pr-3 text-xs font-bold text-gray-800 dark:text-slate-200 outline-none" />
                 </div>
               </div>
             </div>
 
             {/* Category Grid */}
             <div>
-               <label className="block text-[10px] font-bold text-black dark:text-slate-400 mb-2 uppercase tracking-wider">Category</label>
-               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.entries(CATEGORIES).map(([key, cat]) => (
-                    <button 
-                      key={key} 
-                      onClick={() => setFormData({...formData, category: key})} 
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${formData.category === key 
-                        ? `${cat.color} border-current ring-1 ring-current` 
-                        : 'border-transparent bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
-                    >
-                      <cat.icon size={14} />
-                      <span className="text-[10px] font-bold uppercase tracking-tight">{cat.label}</span>
-                    </button>
-                  ))}
-               </div>
+              <label className="block text-[10px] font-bold text-black dark:text-slate-400 mb-2 uppercase tracking-wider">Category</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {Object.entries(CATEGORIES).map(([key, cat]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFormData({ ...formData, category: key })}
+                    className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${formData.category === key
+                      ? `${cat.color} border-current ring-1 ring-current`
+                      : 'border-transparent bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
+                    <cat.icon size={14} />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">{cat.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -471,9 +472,9 @@ const EventModal = ({ isOpen, onClose, onSave, initialData, currentDay, initialS
         {/* Modal Footer */}
         <div className="p-4 border-t border-gray-100 dark:border-slate-800/50 flex gap-3 shrink-0">
           <button onClick={onClose} className="flex-1 py-3 text-sm font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">Cancel</button>
-          <button 
-            onClick={() => onSave(formData)} 
-            disabled={!formData.title} 
+          <button
+            onClick={() => onSave(formData)}
+            disabled={!formData.title}
             className="flex-[2] py-3 bg-sky-600 hover:bg-sky-500 disabled:text-gray-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-sky-600/20 flex justify-center items-center gap-2"
           >
             <Save size={16} /> {initialData ? 'Update Task' : 'Create Task'}
@@ -498,9 +499,9 @@ const MainApp = () => {
 
   const [events, setEvents] = useState(() => {
     try {
-        const saved = localStorage.getItem('lifeSyncEvents');
-        if (saved) return JSON.parse(saved);
-    } catch (e) {}
+      const saved = localStorage.getItem('lifeSyncEvents');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { }
     return INITIAL_EVENTS;
   });
 
@@ -528,35 +529,35 @@ const MainApp = () => {
     }
   };
   const [selectedDay, setSelectedDay] = useState(() => {
-  const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  return dayMap[new Date().getDay()];
+    const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return dayMap[new Date().getDay()];
   });
   const [showUpNext, setShowUpNext] = useState(true);
   const [currentTimeMins, setCurrentTimeMins] = useState(() => {
-      const now = new Date();
-      return now.getHours() * 60 + now.getMinutes();
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
   });
   useEffect(() => {
-      const timer = setInterval(() => {
-          const now = new Date();
-          setCurrentTimeMins(now.getHours() * 60 + now.getMinutes());
-      }, 60000); 
-      return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      const now = new Date();
+      setCurrentTimeMins(now.getHours() * 60 + now.getMinutes());
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
   const [notification, setNotification] = useState(null);
   const [customSoundUrl, setCustomSoundUrl] = useState(() => localStorage.getItem('lifeSyncCustomSound') || null);
   const [activeAlert, setActiveAlert] = useState(null);
-  
+
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     return localStorage.getItem('lifeSyncNotifications') === 'true';
   });
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
-      if (typeof window !== 'undefined') {
-          return localStorage.getItem('theme') === 'dark' || 
-                 (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      }
-      return true;
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' ||
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return true;
   });
 
   const [notifiedEvents, setNotifiedEvents] = useState(() => {
@@ -595,6 +596,11 @@ const MainApp = () => {
       console.error("Firestore Save Error:", error);
     }
   };
+
+  // Always keep a ref to the latest events so drag-end can read it
+  // without stale closure issues.
+  const eventsRef = useRef(events);
+  useEffect(() => { eventsRef.current = events; }, [events]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -616,32 +622,32 @@ const MainApp = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   useEffect(() => {
-      if (isDarkMode) {
-          document.documentElement.classList.add('dark');
-          localStorage.setItem('theme', 'dark');
-      } else {
-          document.documentElement.classList.remove('dark');
-          localStorage.setItem('theme', 'light');
-      }
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
   }, [isDarkMode]);
 
   const startSyntheticVibrantLoop = () => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const playChime = () => {
-        const t = audioCtx.currentTime;
-        [523.25, 659.25, 783.99].forEach((freq, i) => { 
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = freq;
-            osc.type = 'triangle';
-            gain.gain.setValueAtTime(0, t + i * 0.1);
-            gain.gain.linearRampToValueAtTime(0.2, t + i * 0.1 + 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.01, t + i * 0.1 + 0.5);
-            osc.start(t + i * 0.1);
-            osc.stop(t + i * 0.1 + 0.5);
-        });
+      const t = audioCtx.currentTime;
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'triangle';
+        gain.gain.setValueAtTime(0, t + i * 0.1);
+        gain.gain.linearRampToValueAtTime(0.2, t + i * 0.1 + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + i * 0.1 + 0.5);
+        osc.start(t + i * 0.1);
+        osc.stop(t + i * 0.1 + 0.5);
+      });
     };
     playChime();
     audioLoopInterval.current = setInterval(playChime, 2500);
@@ -649,20 +655,20 @@ const MainApp = () => {
 
   const triggerAlert = (title, message) => {
     if (!notificationsEnabled) return;
-    if (activeAlert) return; 
+    if (activeAlert) return;
 
     setActiveAlert({ title, message });
     sendSystemNotification(`Alert: ${title}`, { body: message, icon: '/vite.svg', requireInteraction: true });
     flashTabTitle(`Alert: ${title}`, flashStopRef);
 
     if (customSoundUrl) {
-        customAudioPlayer.current = new Audio(customSoundUrl);
-        customAudioPlayer.current.loop = true;
-        customAudioPlayer.current.play().catch(() => {
-            startSyntheticVibrantLoop();
-        });
-    } else {
+      customAudioPlayer.current = new Audio(customSoundUrl);
+      customAudioPlayer.current.loop = true;
+      customAudioPlayer.current.play().catch(() => {
         startSyntheticVibrantLoop();
+      });
+    } else {
+      startSyntheticVibrantLoop();
     }
   };
 
@@ -671,8 +677,8 @@ const MainApp = () => {
     if (audioLoopInterval.current) clearInterval(audioLoopInterval.current);
     if (flashStopRef.current) flashStopRef.current();
     if (customAudioPlayer.current) {
-        customAudioPlayer.current.pause();
-        customAudioPlayer.current.currentTime = 0;
+      customAudioPlayer.current.pause();
+      customAudioPlayer.current.currentTime = 0;
     }
   };
 
@@ -680,47 +686,47 @@ const MainApp = () => {
     if (!notificationsEnabled) return;
 
     const checkNotifications = () => {
-        if (activeAlert) return; 
-        
-        const now = new Date();
-        const currentDayIndex = now.getDay(); 
-        const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const todayStr = dayMap[currentDayIndex];
-        
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        const currentTimeInMins = currentHour * 60 + currentMinute;
+      if (activeAlert) return;
 
-        events.forEach(event => {
-            if (event.days && event.days.includes(todayStr)) {
-                const eventStartMins = timeToMinutes(event.start);
-                const diff = eventStartMins - currentTimeInMins;
-                const eventUid = `${event.id}-${todayStr}`; 
+      const now = new Date();
+      const currentDayIndex = now.getDay();
+      const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const todayStr = dayMap[currentDayIndex];
 
-                if (diff > 0 && diff <= 10 && !notifiedEvents.has(eventUid)) {
-                    triggerAlert(event.title, `Starting in ${diff} minutes (${event.start})`);
-                    setNotifiedEvents(prev => {
-                      const next = new Set(prev);
-                      next.add(eventUid);
-                      return next;
-                    });
-                }
-            }
-        });
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTimeInMins = currentHour * 60 + currentMinute;
+
+      events.forEach(event => {
+        if (event.days && event.days.includes(todayStr)) {
+          const eventStartMins = timeToMinutes(event.start);
+          const diff = eventStartMins - currentTimeInMins;
+          const eventUid = `${event.id}-${todayStr}`;
+
+          if (diff > 0 && diff <= 10 && !notifiedEvents.has(eventUid)) {
+            triggerAlert(event.title, `Starting in ${diff} minutes (${event.start})`);
+            setNotifiedEvents(prev => {
+              const next = new Set(prev);
+              next.add(eventUid);
+              return next;
+            });
+          }
+        }
+      });
     };
 
-    const interval = setInterval(checkNotifications, 10000); 
-    
+    const interval = setInterval(checkNotifications, 10000);
+
     const cleanup = setInterval(() => {
-        const now = new Date();
-        if (now.getHours() === 0 && now.getMinutes() === 0) {
-            setNotifiedEvents(new Set());
-        }
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() === 0) {
+        setNotifiedEvents(new Set());
+      }
     }, 60000);
 
     return () => {
-        clearInterval(interval);
-        clearInterval(cleanup);
+      clearInterval(interval);
+      clearInterval(cleanup);
     };
   }, [events, notificationsEnabled, notifiedEvents, activeAlert]);
 
@@ -748,15 +754,15 @@ const MainApp = () => {
       await navigator.serviceWorker.ready; // Fixes pushManager error
 
       if (!messaging) {
-         showNotification("Messaging service failed to load", "error");
-         return;
+        showNotification("Messaging service failed to load", "error");
+        return;
       }
 
-      const currentToken = await getToken(messaging, { 
-        vapidKey: 'BMOZR-PBqFw-3ds-7PskvNkqjiQbcsKlV9-CRN3IU9lwd--OoKz5GLJU2YDJhpsrMMozU7EqSZ-W4FDQXRI44tQ', 
+      const currentToken = await getToken(messaging, {
+        vapidKey: 'BMOZR-PBqFw-3ds-7PskvNkqjiQbcsKlV9-CRN3IU9lwd--OoKz5GLJU2YDJhpsrMMozU7EqSZ-W4FDQXRI44tQ',
         serviceWorkerRegistration: registration
       });
-    
+
       if (currentToken) {
         const storageId = user ? user.uid : deviceId;
         await setDoc(doc(db, "deviceTokens", storageId), {
@@ -783,20 +789,20 @@ const MainApp = () => {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-        showNotification("Audio file must be less than 2MB.", "error");
-        return;
+      showNotification("Audio file must be less than 2MB.", "error");
+      return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
-        const base64Audio = event.target.result;
-        setCustomSoundUrl(base64Audio);
-        try {
-            localStorage.setItem('lifeSyncCustomSound', base64Audio);
-            showNotification("Custom alert sound saved!");
-        } catch (e) {
-            showNotification("File too large for local storage.", "error");
-        }
+      const base64Audio = event.target.result;
+      setCustomSoundUrl(base64Audio);
+      try {
+        localStorage.setItem('lifeSyncCustomSound', base64Audio);
+        showNotification("Custom alert sound saved!");
+      } catch (e) {
+        showNotification("File too large for local storage.", "error");
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = null;
@@ -804,24 +810,24 @@ const MainApp = () => {
 
   const findNextFreeSlot = (targetDay) => {
     const dayEvents = events.filter(e => e.days.includes(targetDay))
-                            .sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-    
-    let currentPointer = 8 * 60; 
-    const blockDuration = 60; 
+      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+    let currentPointer = 8 * 60;
+    const blockDuration = 60;
 
     for (let e of dayEvents) {
-        const eStart = timeToMinutes(e.start);
-        const eEnd = timeToMinutes(e.end);
+      const eStart = timeToMinutes(e.start);
+      const eEnd = timeToMinutes(e.end);
 
-        if (eStart - currentPointer >= blockDuration) {
-            return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
-        }
-        if (eEnd > currentPointer) {
-            currentPointer = eEnd;
-        }
+      if (eStart - currentPointer >= blockDuration) {
+        return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
+      }
+      if (eEnd > currentPointer) {
+        currentPointer = eEnd;
+      }
     }
     if (currentPointer + blockDuration < 24 * 60) {
-        return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
+      return { start: minutesToTime(currentPointer), end: minutesToTime(currentPointer + blockDuration) };
     }
     return { start: '09:00', end: '10:00' };
   };
@@ -835,7 +841,7 @@ const MainApp = () => {
 
     return relevantEvents.find(e => {
       if (e.isBusy === false) return false; // Ignore existing tasks marked as "Free"
-      
+
       const eStart = timeToMinutes(e.start);
       const eEnd = timeToMinutes(e.end);
       return (newStart < eEnd && newEnd > eStart);
@@ -852,7 +858,7 @@ const MainApp = () => {
     const slot = findNextFreeSlot(selectedDay);
     const newEvent = { id: Date.now(), title: "Empty Slot", category: "empty", start: slot.start, end: slot.end, days: [selectedDay] };
     const overlap = checkOverlap(newEvent);
-    
+
     if (overlap) return showNotification("Schedule full! Cannot add empty block.", "error");
     updateSchedule([...events, newEvent]);
     showNotification("Added Empty Block at " + slot.start);
@@ -882,38 +888,73 @@ const MainApp = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-        try {
-            const importedEvents = JSON.parse(event.target.result);
-            if (Array.isArray(importedEvents)) {
-                updateSchedule(importedEvents);
-                showNotification("Schedule restored successfully!");
-            }
-        } catch (error) {}
+      try {
+        const importedEvents = JSON.parse(event.target.result);
+        if (Array.isArray(importedEvents)) {
+          updateSchedule(importedEvents);
+          showNotification("Schedule restored successfully!");
+        }
+      } catch (error) { }
     };
     reader.readAsText(file);
-    e.target.value = null; 
+    e.target.value = null;
   };
 
   const handleReorder = (reorderedDayEvents) => {
-    // Cascade times: keep each event's duration, shift start to chain after the previous
-    let pointer = timeToMinutes(reorderedDayEvents[0]?.start ?? '08:00');
-    const rescheduled = reorderedDayEvents.map(event => {
+    // Swap-based reorder: each event keeps its own duration but takes the
+    // start-time of the slot it moved into. We sort the original start times,
+    // then assign them in the new drag order.
+    const originalDayEvents = eventsRef.current
+      .filter(e => e.days && e.days.includes(selectedDay))
+      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+    // Collect sorted start times from the original ordering
+    const sortedStarts = originalDayEvents.map(e => timeToMinutes(e.start));
+
+    // Assign start times positionally: position 0 gets the earliest slot, etc.
+    const rescheduled = reorderedDayEvents.map((event, i) => {
       const duration = getDuration(event.start, event.end);
-      const newStart = minutesToTime(pointer);
-      const newEnd = minutesToTime(pointer + duration);
-      pointer += duration;
+      const newStart = minutesToTime(sortedStarts[i]);
+      const newEnd = minutesToTime(sortedStarts[i] + duration);
       return { ...event, start: newStart, end: newEnd };
     });
 
-    // Merge rescheduled events back into the global events list
+    // Merge into global list and update LOCAL state only (no Firestore yet)
     const reorderedIds = new Set(rescheduled.map(e => e.id));
-    const filteredGlobal = events.filter(e => !reorderedIds.has(e.id));
+    const filteredGlobal = eventsRef.current.filter(e => !reorderedIds.has(e.id));
+    const merged = [...filteredGlobal, ...rescheduled];
 
-    updateSchedule([...filteredGlobal, ...rescheduled]);
+    setEvents(merged);
+    localStorage.setItem('lifeSyncEvents', JSON.stringify(merged));
+  };
+
+  // Called when the user releases the drag handle — persists to Firestore once.
+  const handleDragEnd = async () => {
+    const latest = eventsRef.current;
+    try {
+      if (deviceId) {
+        const storageId = user ? user.uid : deviceId;
+        const activeMinutes = Array.from(new Set(
+          latest.map(e => {
+            const [h, m] = e.start.split(':').map(Number);
+            return h * 60 + m;
+          })
+        ));
+        await setDoc(doc(db, "userSchedules", storageId), {
+          events: latest,
+          activeMinutes,
+          updatedAt: new Date()
+        });
+      }
+    } catch (error) {
+      console.error("Firestore Drag-End Save Error:", error);
+    }
   };
 
   const displayedEvents = useMemo(() => {
-    return events.filter(e => e.days && e.days.includes(selectedDay));
+    return events
+      .filter(e => e.days && e.days.includes(selectedDay))
+      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }, [events, selectedDay]);
 
   const stats = useMemo(() => {
@@ -940,11 +981,11 @@ const MainApp = () => {
     const suggs = [];
     const { byCategory } = stats;
     if (displayedEvents.length > 0 && (!byCategory.health || byCategory.health < 30)) {
-        suggs.push({
-            id: 'missing-health', title: "No Movement",
-            reason: "Missing physical activity.",
-            action: { title: "Walk", category: "health", start: "18:00", end: "18:30", days: [selectedDay] }
-        });
+      suggs.push({
+        id: 'missing-health', title: "No Movement",
+        reason: "Missing physical activity.",
+        action: { title: "Walk", category: "health", start: "18:00", end: "18:30", days: [selectedDay] }
+      });
     }
     return suggs;
   }, [stats, displayedEvents, selectedDay]);
@@ -974,28 +1015,28 @@ const MainApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 font-sans pb-10 transition-colors duration-300">
-      
+
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
       <input type="file" ref={audioInputRef} onChange={handleCustomAudioUpload} className="hidden" accept="audio/*" />
 
       {activeAlert && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-             <div className="bg-white dark:bg-slate-900 border-2 border-sky-500 rounded-3xl p-8 text-center max-w-sm w-full shadow-[0_0_80px_rgba(14,165,233,0.4)] animate-bounce-in">
-                <div className="relative inline-block mb-4">
-                   <div className="absolute inset-0 bg-sky-500 rounded-full animate-ping opacity-75"></div>
-                   <Bell className="w-16 h-16 text-sky-500 relative z-10" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{activeAlert.title}</h2>
-                <p className="text-gray-500 dark:text-slate-400 mb-8 font-medium">{activeAlert.message}</p>
-                <button onClick={dismissAlert} className="w-full py-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-sky-500/50">
-                   Dismiss & Stop Audio
-                </button>
-             </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 border-2 border-sky-500 rounded-3xl p-8 text-center max-w-sm w-full shadow-[0_0_80px_rgba(14,165,233,0.4)] animate-bounce-in">
+            <div className="relative inline-block mb-4">
+              <div className="absolute inset-0 bg-sky-500 rounded-full animate-ping opacity-75"></div>
+              <Bell className="w-16 h-16 text-sky-500 relative z-10" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">{activeAlert.title}</h2>
+            <p className="text-gray-500 dark:text-slate-400 mb-8 font-medium">{activeAlert.message}</p>
+            <button onClick={dismissAlert} className="w-full py-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-sky-500/50">
+              Dismiss & Stop Audio
+            </button>
           </div>
+        </div>
       )}
 
-      <EventModal 
-        isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} 
+      <EventModal
+        isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
         onSave={(data) => {
           // Check for conflicts before saving
           const conflict = checkOverlap(data, editingEvent ? editingEvent.id : null);
@@ -1005,8 +1046,8 @@ const MainApp = () => {
           }
 
           let newEvents;
-          if (editingEvent) newEvents = events.map(e => e.id === editingEvent.id ? {...data, id: e.id} : e);
-          else newEvents = [...events, {...data, id: Date.now().toString()}];
+          if (editingEvent) newEvents = events.map(e => e.id === editingEvent.id ? { ...data, id: e.id } : e);
+          else newEvents = [...events, { ...data, id: Date.now().toString() }];
           updateSchedule(newEvents);
           setIsModalOpen(false);
         }}
@@ -1014,9 +1055,9 @@ const MainApp = () => {
         initialStart={smartTime.start} initialEnd={smartTime.end}
       />
 
-    <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto px-4">
-          
+
           {/* Row 1: Brand & Actions */}
           <div className="flex items-center justify-between py-2.5 mb-2.5">
             {/* Logo */}
@@ -1031,10 +1072,10 @@ const MainApp = () => {
             <div className="flex items-center gap-2">
 
 
-              <button 
-                onClick={toggleNotifications} 
-                className={`p-2 rounded-lg transition-all border ${notificationsEnabled 
-                  ? 'text-emerald-500 border-emerald-500/40 bg-emerald-50 hover:bg-emerald-100 dark:hover:text-emerald-300 dark:bg-emerald-500/10 shadow-[0_0_8px_rgba(16,185,129,0.3)]' 
+              <button
+                onClick={toggleNotifications}
+                className={`p-2 rounded-lg transition-all border ${notificationsEnabled
+                  ? 'text-emerald-500 border-emerald-500/40 bg-emerald-50 hover:bg-emerald-100 dark:hover:text-emerald-300 dark:bg-emerald-500/10 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
                   : 'text-slate-400 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:text-slate-500'}`}
                 title={notificationsEnabled ? 'Notifications ON — tap to disable' : 'Notifications OFF — tap to enable'}
               >
@@ -1042,15 +1083,15 @@ const MainApp = () => {
               </button>
 
               <button onClick={openAddModal} className="bg-sky-600 p-2 rounded-lg hover:bg-sky-500 text-white shadow-lg shadow-sky-600/20 active:scale-95 transition-transform" title="Add Event">
-                <Plus size={18}/>
+                <Plus size={18} />
               </button>
 
               {user ? (
-                  <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
-                      <img src={user.photoURL} alt="profile" className="w-full h-full object-cover" />
-                  </div>
+                <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+                  <img src={user.photoURL} alt="profile" className="w-full h-full object-cover" />
+                </div>
               ) : (
-                  <button onClick={handleLogin} className="p-2 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-slate-200 hover:dark:bg-slate-800 hover:dark:text-sky-400 font-bold text-xs" title="Login"><LogIn size={20}/></button>
+                <button onClick={handleLogin} className="p-2 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-slate-200 hover:dark:bg-slate-800 hover:dark:text-sky-400 font-bold text-xs" title="Login"><LogIn size={20} /></button>
               )}
 
               {/* 3-Dot Menu */}
@@ -1062,22 +1103,21 @@ const MainApp = () => {
                 {isMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden py-1 z-[60]">
                     <button onClick={() => { setIsDarkMode(!isDarkMode); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                      {isDarkMode ? <Sun size={16}/> : <Moon size={16}/>}
+                      {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
                       {isDarkMode ? 'Light Mode' : 'Dark Mode'}
                     </button>
                     <div className="h-[1px] bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
                     <button onClick={() => { exportData(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                      <Download size={16}/> Export Schedule
+                      <Download size={16} /> Export Schedule
                     </button>
                     <button onClick={() => { fileInputRef.current.click(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                      <Upload size={16}/> Import Schedule
+                      <Upload size={16} /> Import Schedule
                     </button>
-                    <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={importData} />
                     {user && (
                       <>
                         <div className="h-[1px] bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
                         <button onClick={() => { signOut(auth); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                          <LogOut size={16}/> Logout
+                          <LogOut size={16} /> Logout
                         </button>
                       </>
                     )}
@@ -1090,15 +1130,15 @@ const MainApp = () => {
           {/* Row 2: Day Selection */}
           <div className="flex gap-1.5 pb-6 overflow-x-auto no-scrollbar justify-between">
             {DAYS_OF_WEEK.map(d => (
-                <button 
-                  key={d} 
-                  onClick={() => setSelectedDay(d)} 
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all uppercase tracking-wider border ${selectedDay === d 
-                    ? 'bg-sky-600 text-white dark:text-black hover:bg-sky-500 shadow-md shadow-sky-500/20 border-sky-500' 
-                    : 'bg-slate-100 text-slate-800 dark:bg-slate-800/50 dark:text-slate-300 border-transparent hover:border-blue-500 dark:hover:border-slate-400'}`}
-                >
-                  {d.slice(0,3)}
-                </button>
+              <button
+                key={d}
+                onClick={() => setSelectedDay(d)}
+                className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all uppercase tracking-wider border ${selectedDay === d
+                  ? 'bg-sky-600 text-white dark:text-black hover:bg-sky-500 shadow-md shadow-sky-500/20 border-sky-500'
+                  : 'bg-slate-100 text-slate-800 dark:bg-slate-800/50 dark:text-slate-300 border-transparent hover:border-blue-500 dark:hover:border-slate-400'}`}
+              >
+                {d.slice(0, 3)}
+              </button>
             ))}
           </div>
 
@@ -1106,13 +1146,13 @@ const MainApp = () => {
       </header>
       {notification && (
         <div className={`fixed bottom-10 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-lg shadow-2xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 z-50 font-medium 
-          ${notification.type === 'error' ? 'bg-red-500 text-white' : 
+          ${notification.type === 'error' ? 'bg-red-500 text-white' :
             notification.type === 'info' ? 'bg-slate-700 dark:bg-slate-600 text-slate-100' : // Softer, darker theme for standard info/delete
-            'bg-emerald-600 text-white'}`} // Success
+              'bg-emerald-600 text-white'}`} // Success
         >
-          {notification.type === 'error' ? <AlertTriangle size={18} /> : 
-          notification.type === 'info' ? <Trash2 size={18} /> : 
-          <CheckCircle size={18} />}
+          {notification.type === 'error' ? <AlertTriangle size={18} /> :
+            notification.type === 'info' ? <Trash2 size={18} /> :
+              <CheckCircle size={18} />}
           {notification.msg}
         </div>
       )}
@@ -1120,80 +1160,81 @@ const MainApp = () => {
       <main className="max-w-4xl mx-auto px-4 mt-8 flex-1">
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 space-y-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 p-5 min-h-[400px]">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="font-semibold text-gray-800 dark:text-slate-200 flex items-center gap-2">
-                                <Calendar size={18} className="text-gray-400 dark:text-slate-500"/> {selectedDay} Timeline
-                            </h2>
-                            <span className="text-xs bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 px-3 py-1 rounded-full font-medium border border-gray-200 dark:border-slate-700">
-                                {displayedEvents.length} Blocks
-                            </span>
-                        </div>
-                        
-                        {displayedEvents.length === 0 ? (
-                            <div className="text-center py-12 text-gray-400 dark:text-slate-300">
-                                <p>No tasks for {selectedDay}.</p>
-                                <button onClick={openAddModal} className="mt-4 text-sky-500 hover:text-sky-400 text-sm font-medium">+ Create one now</button>
-                            </div>
-                        ) : (
-                            <Reorder.Group 
-                              axis="y" 
-                              values={displayedEvents} 
-                              onReorder={handleReorder}
-                              className="relative ml-2 space-y-2"
-                            >
-                                {displayedEvents.map((event) => {
-                                  const startMins = timeToMinutes(event.start);
-                                  const endMins = timeToMinutes(event.end);
-                                  const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-                                  const isToday = selectedDay === dayMap[new Date().getDay()];
-                                  const isActive = isToday && (currentTimeMins >= startMins && currentTimeMins < endMins);
+          <div className="md:col-span-2 space-y-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800 p-5 min-h-[400px]">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="font-semibold text-gray-800 dark:text-slate-200 flex items-center gap-2">
+                  <Calendar size={18} className="text-gray-400 dark:text-slate-500" /> {selectedDay} Timeline
+                </h2>
+                <span className="text-xs bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 px-3 py-1 rounded-full font-medium border border-gray-200 dark:border-slate-700">
+                  {displayedEvents.length} Blocks
+                </span>
+              </div>
 
-                                  return (
-                                    <EventCard 
-                                      key={event.id} 
-                                      event={event} 
-                                      isActive={isActive}
-                                      onDelete={(id) => {
-                                        updateSchedule(events.filter(e => e.id !== id));
-                                        showNotification("Task deleted", "info");
-                                      }}
-                                      onEdit={openEditModal} 
-                                    />
-                                  );
-                                })}
-                            </Reorder.Group>
-                        )}
-                    </div>
-            </div>
-
-            <div className="space-y-4">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5">
-                    <h3 className="font-semibold text-gray-700 dark:text-slate-300 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
-                        <Brain size={14} className="text-amber-500 dark:text-amber-400" /> Suggestions
-                    </h3>
-                    
-                    {suggestions.length > 0 ? (
-                        suggestions.map(sugg => (
-                            <SuggestionCard key={sugg.id} suggestion={sugg} onAccept={() => {
-                                const newAction = { ...sugg.action, id: Date.now() };
-                                const overlap = checkOverlap(newAction);
-                                if (overlap) {
-                                    showNotification(`Cannot add suggestion: Conflicts with "${overlap.title}"`, 'error');
-                                } else {
-                                    updateSchedule([...events, newAction]);
-                                    showNotification("Block added.");
-                                }
-                            }} />
-                        ))
-                    ) : (
-                        <div className="text-center py-6 text-gray-400 dark:text-slate-300 text-sm">
-                            Schedule is optimal for {selectedDay}.
-                        </div>
-                    )}
+              {displayedEvents.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 dark:text-slate-300">
+                  <p>No tasks for {selectedDay}.</p>
+                  <button onClick={openAddModal} className="mt-4 text-sky-500 hover:text-sky-400 text-sm font-medium">+ Create one now</button>
                 </div>
+              ) : (
+                <Reorder.Group
+                  axis="y"
+                  values={displayedEvents}
+                  onReorder={handleReorder}
+                  className="relative ml-2 space-y-2"
+                >
+                  {displayedEvents.map((event) => {
+                    const startMins = timeToMinutes(event.start);
+                    const endMins = timeToMinutes(event.end);
+                    const dayMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                    const isToday = selectedDay === dayMap[new Date().getDay()];
+                    const isActive = isToday && (currentTimeMins >= startMins && currentTimeMins < endMins);
+
+                    return (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        isActive={isActive}
+                        onDelete={(id) => {
+                          updateSchedule(events.filter(e => e.id !== id));
+                          showNotification("Task deleted", "info");
+                        }}
+                        onEdit={openEditModal}
+                        onDragEnd={handleDragEnd}
+                      />
+                    );
+                  })}
+                </Reorder.Group>
+              )}
             </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5">
+              <h3 className="font-semibold text-gray-700 dark:text-slate-300 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
+                <Brain size={14} className="text-amber-500 dark:text-amber-400" /> Suggestions
+              </h3>
+
+              {suggestions.length > 0 ? (
+                suggestions.map(sugg => (
+                  <SuggestionCard key={sugg.id} suggestion={sugg} onAccept={() => {
+                    const newAction = { ...sugg.action, id: Date.now() };
+                    const overlap = checkOverlap(newAction);
+                    if (overlap) {
+                      showNotification(`Cannot add suggestion: Conflicts with "${overlap.title}"`, 'error');
+                    } else {
+                      updateSchedule([...events, newAction]);
+                      showNotification("Block added.");
+                    }
+                  }} />
+                ))
+              ) : (
+                <div className="text-center py-6 text-gray-400 dark:text-slate-300 text-sm">
+                  Schedule is optimal for {selectedDay}.
+                </div>
+              )}
+            </div>
+          </div>
 
         </div>
       </main>
