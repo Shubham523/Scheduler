@@ -8,7 +8,7 @@ import {
   Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen, 
   Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle, 
   Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, Music,
-  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, RefreshCw,MoreVertical 
+  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, MoreVertical 
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -43,7 +43,6 @@ const CATEGORIES = {
   health: { label: "Health", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-200 border-emerald-500/30", barColor: "bg-emerald-500", icon: Activity },
   leisure: { label: "Leisure", color: "bg-orange-500/10 text-orange-600 dark:text-orange-200 border-orange-500/30", barColor: "bg-orange-500", icon: Coffee },
   chore: { label: "Chores", color: "bg-slate-200 dark:bg-slate-700/30 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600/30", barColor: "bg-slate-500", icon: Layout },
-  google: { label: "G-Cal", color: "bg-sky-500/10 text-sky-600 dark:text-sky-300 border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]", barColor: "bg-sky-400", icon: Calendar }
 };
 
 // --- Helper Functions ---
@@ -212,9 +211,9 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
 
       <div 
         ref={cardRef}
-        onTouchStart={event.category !== 'google' ? handleTouchStart : undefined}
-        onTouchEnd={event.category !== 'google' ? handleTouchEnd : undefined}
-        onDoubleClick={() => event.category !== 'google' && onEdit(event)}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onDoubleClick={() => onEdit(event)}
         style={{ transform: `translateX(${swipeOffset}px)`, touchAction: 'pan-y' }}
         className={`relative group py-4 px-1 border cursor-pointer select-none
         ${isActive ? 'border-transparent shadow-[0_0_30px_rgba(56,189,248,0.25)] bg-gradient-to-r from-sky-100/80 to-transparent dark:from-sky-900/40 dark:to-slate-900' : `${catConfig.color} bg-white dark:bg-slate-900`}
@@ -225,6 +224,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
         {/* LEFT HANDLE */}
         <div 
           onPointerDown={(e) => dragControls.start(e)}
+          style={{ touchAction: 'none' }}
           className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
         >
           ⟨
@@ -274,6 +274,7 @@ const EventCard = ({ event, onDelete, onEdit, isActive }) => {
         {/* RIGHT HANDLE */}
         <div 
           onPointerDown={(e) => dragControls.start(e)}
+          style={{ touchAction: 'none' }}
           className={`animate-pulse text-2xl font-light w-8 flex-shrink-0 flex justify-center transition-colors cursor-grab active:cursor-grabbing ${isActive ? 'text-sky-400/80' : 'text-slate-300 dark:text-slate-700'}`}
         >
           ⟩
@@ -504,8 +505,6 @@ const MainApp = () => {
   });
 
   const [user, setUser] = useState(null);
-  const [gcalEvents, setGcalEvents] = useState([]);
-  const [isSyncing, setIsSyncing] = useState(false);
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
@@ -513,103 +512,19 @@ const MainApp = () => {
         const docRef = doc(db, "userSchedules", u.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().events) setEvents(docSnap.data().events);
-        fetchGCal(localStorage.getItem('gcalToken'));
       }
     });
     return () => unsubscribe();
   }, []);
-  const handleSync = async () => {
-    const success = await fetchGCal();
-    if (!success) {
-      // Token expired or missing, trigger re-auth without logout
-      handleLogin();
-    } else {
-      showNotification("Calendar synced!");
-    }
-  };
+
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
     try {
-      // If popup still fails due to COOP, you can use signInWithRedirect(auth, provider)
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const token = credential.accessToken;
-      localStorage.setItem('gcalToken', token);
-      fetchGCal(token);
-      showNotification("Logged in and synced!");
-    } catch (err) { 
+      await signInWithPopup(auth, provider);
+      showNotification("Logged in!");
+    } catch (err) {
       console.error("LOGIN ERROR:", err);
-      showNotification("Login failed. Check console.", "error"); 
-    }
-  };
-
-  const fetchGCal = async (token = localStorage.getItem('gcalToken')) => {
-    if (!token) return false;
-    setIsSyncing(true);
-    try {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date();
-      end.setDate(end.getDate() + 7);
-
-      const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      if (res.status === 401) {
-        localStorage.removeItem('gcalToken');
-        setIsSyncing(false);
-        return false; // Signal that we need a new token
-      }
-
-      const data = await res.json();
-      if (data.items) {
-        const formatted = data.items.map(item => {
-          const startDT = new Date(item.start.dateTime || item.start.date);
-          const endDT = new Date(item.end.dateTime || item.end.date);
-          const dayName = DAYS_OF_WEEK[startDT.getDay() === 0 ? 6 : startDT.getDay() - 1];
-
-          return {
-            id: item.id,
-            title: item.summary,
-            category: 'google',
-            start: startDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-            end: endDT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-            days: [dayName], 
-            isBusy: item.transparency !== 'transparent'
-          };
-        });
-        setGcalEvents(formatted);
-        // Mirror to Cloud for Push Notifications
-        const storageId = user ? user.uid : deviceId;
-        const docRef = doc(db, "userSchedules", storageId);
-        const docSnap = await getDoc(docRef);
-        const currentData = docSnap.exists() ? docSnap.data() : { events: [] };
-        
-        // Combine active minutes for both internal and gcal events
-        const allEvents = [...(currentData.events || []), ...formatted];
-        const activeMinutes = Array.from(new Set(
-          allEvents.map(e => {
-            const [h, m] = e.start.split(':').map(Number);
-            return h * 60 + m;
-          })
-        ));
-
-        await setDoc(docRef, {
-          ...currentData,
-          gcalEvents: formatted,
-          activeMinutes: activeMinutes,
-          updatedAt: new Date()
-        });
-      }
-      setIsSyncing(false);
-      return true;
-    } catch (e) { 
-      console.error("FETCH ERROR:", e); 
-      setIsSyncing(false);
-      return false;
+      showNotification("Login failed. Check console.", "error");
     }
   };
   const [selectedDay, setSelectedDay] = useState(() => {
@@ -658,23 +573,20 @@ const MainApp = () => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [smartTime, setSmartTime] = useState({ start: '09:00', end: '10:00' });
 
-  // 2. Updated Firestore Sync Function
-    const updateSchedule = async (newEvents) => {
-    setEvents(newEvents); 
+  // Firestore Sync Function
+  const updateSchedule = async (newEvents) => {
+    setEvents(newEvents);
     try {
       if (deviceId) {
         const storageId = user ? user.uid : deviceId;
-        // Optimization: Create a unique list of all start times in minutes from BOTH sources
-        const allEvents = [...newEvents, ...gcalEvents];
         const activeMinutes = Array.from(new Set(
-          allEvents.map(e => {
+          newEvents.map(e => {
             const [h, m] = e.start.split(':').map(Number);
             return h * 60 + m;
           })
         ));
         await setDoc(doc(db, "userSchedules", storageId), {
           events: newEvents,
-          gcalEvents: gcalEvents, // Keep mirrored copy
           activeMinutes: activeMinutes,
           updatedAt: new Date()
         });
@@ -890,12 +802,6 @@ const MainApp = () => {
     e.target.value = null;
   };
 
-  const removeCustomAudio = () => {
-      setCustomSoundUrl(null);
-      localStorage.removeItem('lifeSyncCustomSound');
-      showNotification("Restored default alert chime.");
-  };
-
   const findNextFreeSlot = (targetDay) => {
     const dayEvents = events.filter(e => e.days.includes(targetDay))
                             .sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
@@ -989,27 +895,26 @@ const MainApp = () => {
   };
 
   const handleReorder = (reorderedDayEvents) => {
-    // 1. Filter out G-Cal events from the reordered list (they are read-only/mirrored)
-    const internalReordered = reorderedDayEvents.filter(e => e.category !== 'google');
-    
-    // 2. Map reordered events back into the global list
-    const reorderedIds = new Set(internalReordered.map(e => e.id));
+    // Cascade times: keep each event's duration, shift start to chain after the previous
+    let pointer = timeToMinutes(reorderedDayEvents[0]?.start ?? '08:00');
+    const rescheduled = reorderedDayEvents.map(event => {
+      const duration = getDuration(event.start, event.end);
+      const newStart = minutesToTime(pointer);
+      const newEnd = minutesToTime(pointer + duration);
+      pointer += duration;
+      return { ...event, start: newStart, end: newEnd };
+    });
+
+    // Merge rescheduled events back into the global events list
+    const reorderedIds = new Set(rescheduled.map(e => e.id));
     const filteredGlobal = events.filter(e => !reorderedIds.has(e.id));
-    
-    updateSchedule([...filteredGlobal, ...internalReordered]);
+
+    updateSchedule([...filteredGlobal, ...rescheduled]);
   };
 
   const displayedEvents = useMemo(() => {
-    // Merge internal and G-Cal events for current day
-    const dayInternal = events.filter(e => e.days && e.days.includes(selectedDay));
-    const dayGcal = gcalEvents.filter(e => e.days && e.days.includes(selectedDay));
-    
-    // IMPORTANT: We do NOT force a time-sort for internal events anymore,
-    // but we do sort G-Cal events by time since they are external.
-    const sortedGcal = [...dayGcal].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-    
-    return [...dayInternal, ...sortedGcal];
-  }, [events, gcalEvents, selectedDay]);
+    return events.filter(e => e.days && e.days.includes(selectedDay));
+  }, [events, selectedDay]);
 
   const stats = useMemo(() => {
     const totalMinutes = displayedEvents.reduce((acc, curr) => acc + getDuration(curr.start, curr.end), 0);
@@ -1124,15 +1029,7 @@ const MainApp = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              {user && (
-                <button 
-                  onClick={handleSync} 
-                  className={`p-2 rounded-lg text-slate-500 hover:text-sky-500 transition-colors ${isSyncing ? 'animate-spin' : ''}`}
-                  title="Refresh Calendar"
-                >
-                  <RefreshCw size={18}/>
-                </button>
-)}
+
 
               <button 
                 onClick={toggleNotifications} 
