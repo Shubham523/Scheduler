@@ -1061,9 +1061,9 @@ const MainApp = () => {
           {/* Row 1: Brand & Actions */}
           <div className="flex items-center justify-between py-2.5 mb-2.5">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="text-white shadow-lg ">
-                <img src="/LifeSync.png" alt="Logo" className="w-6 h-6" />
+            <div className="flex items-center gap-1">
+              <div>
+                <img src="/LifeSync.png" alt="Logo" className="w-7 h-7" />
               </div>
               <h1 className="font-bold text-lg">LifeSync</h1>
             </div>
@@ -1241,8 +1241,8 @@ const MainApp = () => {
 
       <footer className="mt-12 py-6 text-center text-gray-500 dark:text-slate-400 text-xs border-t border-gray-200 dark:border-slate-800/50">
         <p className="flex items-center justify-center gap-2">
-            <Code size={12} />
-            Developed by <span className="text-sky-600 dark:text-sky-500 font-medium">Shubham Saini</span> • © {new Date().getFullYear()}
+          <Code size={12} />
+          Developed by <span className="text-sky-600 dark:text-sky-500 font-medium">Shubham Saini</span> • © {new Date().getFullYear()}
         </p>
       </footer>
     </div>
