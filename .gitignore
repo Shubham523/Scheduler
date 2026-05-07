@@ -26,10 +26,24 @@ dist-ssr
 .env.test.local
 .env.production.local
 *.local
+# Keep .env.example committed (it's a safe template with no real values)
+!.env.example
+
+# Generated files (built from templates — contain injected secrets)
+# Source template: src/firebase-messaging-sw.js
+public/firebase-messaging-sw.js
+
+# Firebase Admin SDK service account key (never commit this)
+serviceAccountKey.json
+*.serviceAccount.json
+
+# Vercel
+.vercel
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo
@@ -41,4 +55,4 @@ dist-ssr
 # Windows System Files
 Thumbs.db
 ehthumbs.db
-Desktop.ini
+Desktop.ini
