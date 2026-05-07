@@ -133,12 +133,13 @@ export default async function handler(req, res) {
                     [`lastNotified.${eventDedupKey}`]: true,
                   });
               } catch (sendError) {
-                if (
-                  sendError.code ===
-                  "messaging/registration-token-not-registered"
-                ) {
-                  await db.collection("deviceTokens").doc(deviceId).delete();
-                }
+                  console.error(`FCM send failed for ${deviceId}:`, sendError.code, sendError.message);
+                  // Only delete if the token is permanently invalid (not a transient error)
+                  if (sendError.code === "messaging/registration-token-not-registered" ||
+                      sendError.code === "messaging/invalid-registration-token") {
+                    console.warn(`Removing stale token for device: ${deviceId}`);
+                    await db.collection("deviceTokens").doc(deviceId).delete();
+                  }
               }
             });
           promises.push(tokenPromise);

@@ -24,9 +24,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const messaging = typeof window !== 'undefined' &&
-  'serviceWorker' in navigator &&
-  window.isSecureContext ? getMessaging(app) : null;
+let messaging = null;
+try {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    messaging = getMessaging(app);
+  }
+} catch (e) {
+  console.warn('Firebase Messaging could not be initialized:', e);
+}
 
 // --- Constants ---
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -590,7 +595,7 @@ const MainApp = () => {
           events: newEvents,
           activeMinutes: activeMinutes,
           updatedAt: new Date()
-        });
+        }, { merge: true });
       }
     } catch (error) {
       console.error("Firestore Save Error:", error);
@@ -765,18 +770,29 @@ const MainApp = () => {
 
       if (currentToken) {
         const storageId = user ? user.uid : deviceId;
+        console.log('FCM Token obtained, saving to Firestore for:', storageId);
         await setDoc(doc(db, "deviceTokens", storageId), {
           token: currentToken,
-          userId: user ? user.uid : null, // Store relationship
+          deviceId: deviceId,
+          userId: user ? user.uid : null,
           updatedAt: new Date()
         });
         setNotificationsEnabled(true);
         localStorage.setItem('lifeSyncNotifications', 'true');
         showNotification("Notifications enabled");
+      } else {
+        console.error('getToken() returned empty. Service worker may not be active yet.');
+        showNotification("Could not get notification token. Try again.", "error");
       }
     } catch (err) {
-      console.error("Token Error:", err);
-      showNotification("Failed to connect notifications.", "error");
+      console.error("Token Error:", err.code, err.message, err);
+      if (err.code === 'messaging/permission-blocked') {
+        showNotification("Notifications blocked. Please allow in browser settings.", "error");
+      } else if (err.code === 'messaging/unsupported-browser') {
+        showNotification("This browser doesn't support push notifications.", "error");
+      } else {
+        showNotification(`Notification setup failed: ${err.message || err.code || 'Unknown error'}`, "error");
+      }
     }
   };
 
