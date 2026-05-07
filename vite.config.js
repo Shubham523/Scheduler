@@ -8,12 +8,17 @@ import path from 'path'
  * with real env values, and writes the result to public/firebase-messaging-sw.js.
  * Runs at dev-server start and at build time — the generated file is gitignored.
  */
-function firebaseSwPlugin() {
-  const injectSw = (env) => {
-    const templatePath = path.resolve(__dirname, 'src/firebase-messaging-sw.js')
-    const outputPath = path.resolve(__dirname, 'public/firebase-messaging-sw.js')
+function firebaseSwPlugin(env) {
+  // Strip template-only header comments (lines starting with // ⚠️ or // The Vite plugin)
+  const TEMPLATE_HEADER_RE = /^\/\/ ⚠️.*\n(\/\/.*\n)*/m
 
+  const processSw = () => {
+    const dir = import.meta.dirname
+    const templatePath = path.resolve(dir, 'src/firebase-messaging-sw.js')
     let template = fs.readFileSync(templatePath, 'utf-8')
+
+    // Remove the template-only warning comments so they don't appear in the output
+    template = template.replace(TEMPLATE_HEADER_RE, '')
 
     // Replace every __VITE_*__ placeholder with the matching env var
     template = template.replace(/__VITE_([A-Z0-9_]+)__/g, (_, key) => {
@@ -22,29 +27,24 @@ function firebaseSwPlugin() {
       return value || ''
     })
 
-    fs.writeFileSync(outputPath, template, 'utf-8')
-    console.log('[firebase-sw] Generated public/firebase-messaging-sw.js ✓')
+    return template
   }
 
   return {
     name: 'firebase-sw-inject',
-    // Called when the dev server starts
-    configResolved(config) {
-      injectSw(config.env)
+    // Runs at dev-server start — writes processed SW to public/ for the dev server to serve
+    configResolved() {
+      const dir = import.meta.dirname
+      const outputPath = path.resolve(dir, 'public/firebase-messaging-sw.js')
+      fs.writeFileSync(outputPath, processSw(), 'utf-8')
+      console.log('[firebase-sw] Generated public/firebase-messaging-sw.js ✓')
     },
-    // Also emit the processed SW as a build asset
-    generateBundle(_, bundle) {
-      const templatePath = path.resolve(__dirname, 'src/firebase-messaging-sw.js')
-      let template = fs.readFileSync(templatePath, 'utf-8')
-
-      template = template.replace(/__VITE_([A-Z0-9_]+)__/g, (_, key) => {
-        return process.env[`VITE_${key}`] || ''
-      })
-
+    // Runs at build time — emits processed SW directly into dist/
+    generateBundle() {
       this.emitFile({
         type: 'asset',
         fileName: 'firebase-messaging-sw.js',
-        source: template,
+        source: processSw(),
       })
     },
   }
@@ -52,13 +52,10 @@ function firebaseSwPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
+  // Load all env vars (no prefix filter) so the plugin can access VITE_* vars
   const env = loadEnv(mode, process.cwd(), '')
-  // Expose VITE_* vars to the plugin via process.env for build step
-  Object.entries(env).forEach(([k, v]) => {
-    if (k.startsWith('VITE_')) process.env[k] = v
-  })
 
   return {
-    plugins: [react(), firebaseSwPlugin()],
+    plugins: [react(), firebaseSwPlugin(env)],
   }
 })
