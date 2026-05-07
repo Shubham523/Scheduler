@@ -960,7 +960,7 @@ const MainApp = () => {
           events: latest,
           activeMinutes,
           updatedAt: new Date()
-        });
+        }, { merge: true });
       }
     } catch (error) {
       console.error("Firestore Drag-End Save Error:", error);
