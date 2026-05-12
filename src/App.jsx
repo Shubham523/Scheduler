@@ -2,13 +2,12 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Reorder, useDragControls } from 'framer-motion';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
-import { getMessaging, getToken } from "firebase/messaging";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { getMessaging, getToken, deleteToken } from "firebase/messaging";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import {
   Calendar, Clock, Brain, Activity, Coffee, Briefcase, BookOpen,
   Plus, Trash2, CheckCircle, Layout, Edit2, X, Save, AlertTriangle,
-  Download, Upload, Bell, BellOff, Play, Pause, RotateCcw, Music,
-  Minimize2, Code, SquareDashedBottom, Sun, Moon, LogIn, LogOut, MoreVertical
+  Download, Upload, Bell, BellOff, Code, Sun, Moon, LogIn, LogOut, MoreVertical
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -740,6 +739,14 @@ const MainApp = () => {
     if (notificationsEnabled) {
       setNotificationsEnabled(false);
       localStorage.setItem('lifeSyncNotifications', 'false');
+      // Remove the FCM token from Firestore so the cron stops targeting this device
+      try {
+        const storageId = user ? user.uid : deviceId;
+        await deleteDoc(doc(db, 'deviceTokens', storageId));
+        if (messaging) await deleteToken(messaging);
+      } catch (err) {
+        console.error('[Notifications] Failed to remove FCM token:', err);
+      }
       return;
     }
 
